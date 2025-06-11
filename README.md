@@ -69,6 +69,79 @@ npm run dev
 npm start
 ```
 
+## ⚠️ 重要：API请求格式要求
+
+### 📋 请求体格式规范
+
+**所有POST/PUT请求必须遵循以下格式要求：**
+
+#### ✅ 正确格式
+```javascript
+// 请求头
+Content-Type: application/json
+
+// 请求体 - 直接发送JSON对象
+{
+  "email": "user@example.com",
+  "password": "yourpassword"
+}
+```
+
+#### ❌ 错误格式
+```javascript
+// 🚫 不要进行Base64编码
+"eyJlbWFpbCI6InVzZXJAZXhhbXBsZS5jb20ifQ=="
+
+// 🚫 不要进行双重JSON字符串化
+"\"{\\\"email\\\":\\\"user@example.com\\\"}\""
+
+// 🚫 不要发送字符串格式的JSON
+"{\"email\":\"user@example.com\"}"
+```
+
+#### 📝 客户端发送示例
+```javascript
+// ✅ 正确的发送方式
+fetch('/api/auth/login', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer your_token_here' // 如需认证
+  },
+  body: JSON.stringify({
+    email: 'user@example.com',
+    password: 'yourpassword'
+  })
+});
+
+// ✅ 使用curl
+curl -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"yourpassword"}'
+```
+
+### 🔒 认证要求
+
+需要认证的API端点必须在请求头中包含有效的JWT令牌：
+
+```
+Authorization: Bearer your_jwt_token_here
+```
+
+### 📊 响应格式
+
+所有API响应都遵循统一格式：
+
+```json
+{
+  "success": true|false,
+  "message": "响应消息",
+  "data": {
+    // 响应数据
+  }
+}
+```
+
 ## API文档
 
 ### 认证相关

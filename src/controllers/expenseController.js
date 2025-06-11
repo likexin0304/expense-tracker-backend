@@ -1,378 +1,355 @@
-/**
- * 支出控制器
- * 处理所有支出记录相关的业务逻辑
- */
-
 const Expense = require('../models/Expense');
-const Budget = require('../models/Budget');
 
-/**
- * 添加支出记录
- */
-const addExpense = async (req, res) => {
-    try {
-        console.log('💰 添加支出请求:', { userId: req.userId, body: req.body });
-        
-        const { amount, category, description = '' } = req.body;
-        const userId = req.userId;
+// 创建支出记录
+exports.createExpense = async (req, res) => {
+  try {
+    console.log('📝 创建支出记录请求:', {
+      userId: req.userId,
+      body: req.body
+    });
 
-        // 输入验证
-        if (!amount || amount <= 0) {
-            return res.status(400).json({
-                success: false,
-                message: '请输入有效的支出金额'
-            });
-        }
+    const { amount, category, description, date, location, paymentMethod, tags } = req.body;
 
-        if (amount > 100000) {
-            return res.status(400).json({
-                success: false,
-                message: '单次支出金额不能超过10万元'
-            });
-        }
-
-        if (!category || category.trim() === '') {
-            return res.status(400).json({
-                success: false,
-                message: '请选择支出分类'
-            });
-        }
-
-        // 创建支出记录
-        const expense = await Expense.create({
-            userId,
-            amount,
-            category: category.trim(),
-            description: description.trim()
-        });
-
-        console.log(`✅ 支出记录创建成功: 用户${userId} ¥${amount} ${category}`);
-
-        res.status(201).json({
-            success: true,
-            message: '支出记录添加成功',
-            data: {
-                expense: expense.toJSON()
-            }
-        });
-
-    } catch (error) {
-        console.error('❌ 添加支出错误:', error);
-        res.status(500).json({
-            success: false,
-            message: '服务器内部错误'
-        });
+    // 数据验证
+    if (!amount || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: '金额必须大于0'
+      });
     }
+
+    if (!category) {
+      return res.status(400).json({
+        success: false,
+        message: '支出分类不能为空'
+      });
+    }
+
+    if (!description || description.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: '支出描述不能为空'
+      });
+    }
+
+    const expenseData = {
+      userId: req.userId,
+      amount: parseFloat(amount),
+      category,
+      description: description.trim(),
+      date: date ? new Date(date) : new Date(),
+      location: location || null,
+      paymentMethod: paymentMethod || 'cash',
+      tags: tags || []
+    };
+
+    const expense = await Expense.create(expenseData);
+
+    console.log('✅ 支出记录创建成功:', expense.id);
+
+    res.status(201).json({
+      success: true,
+      message: '支出记录创建成功',
+      data: expense
+    });
+
+  } catch (error) {
+    console.error('❌ 创建支出记录失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '创建支出记录失败',
+      error: error.message
+    });
+  }
 };
 
-/**
- * 获取支出记录列表
- */
-const getExpenses = async (req, res) => {
-    try {
-        console.log('📋 获取支出列表请求:', { userId: req.userId, query: req.query });
-        
-        const userId = req.userId;
-        const { page = 1, limit = 20, category, startDate, endDate } = req.query;
+// 获取用户支出列表
+exports.getExpenses = async (req, res) => {
+  try {
+    console.log('📋 获取支出列表请求:', {
+      userId: req.userId,
+      query: req.query
+    });
 
-        // 获取用户所有支出
-        let expenses = await Expense.findByUserId(userId);
+    const { 
+      page = 1, 
+      limit = 20, 
+      category, 
+      startDate, 
+      endDate,
+      sortBy = 'date',
+      sortOrder = 'desc'
+    } = req.query;
 
-        // 按分类过滤
-        if (category && category !== 'all') {
-            expenses = expenses.filter(expense => expense.category === category);
-            console.log(`🔍 按分类过滤: ${category}, 结果数量: ${expenses.length}`);
+    // 构建查询选项
+    const options = {
+      category,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined,
+      sort: sortBy === 'date' ? 'date_desc' : sortBy === 'amount' ? 'amount_desc' : undefined,
+      limit: parseInt(limit),
+      offset: (parseInt(page) - 1) * parseInt(limit)
+    };
+
+    console.log('🔍 查询选项:', options);
+
+    // 执行查询
+    const expenses = await Expense.findByUserId(req.userId, options);
+    
+    // 获取总数 (简化版本，实际中可以添加总数计算)
+    const allExpenses = await Expense.findByUserId(req.userId, { 
+      category, 
+      startDate: options.startDate, 
+      endDate: options.endDate 
+    });
+    const total = allExpenses.length;
+
+    console.log(`✅ 查询到 ${expenses.length} 条支出记录，总共 ${total} 条`);
+
+    res.json({
+      success: true,
+      data: {
+        expenses,
+        pagination: {
+          current: parseInt(page),
+          pages: Math.ceil(total / parseInt(limit)),
+          total,
+          limit: parseInt(limit)
         }
+      }
+    });
 
-        // 按日期范围过滤
-        if (startDate || endDate) {
-            const start = startDate ? new Date(startDate) : new Date('1900-01-01');
-            const end = endDate ? new Date(endDate) : new Date();
-            
-            expenses = expenses.filter(expense => {
-                const expenseDate = new Date(expense.createdAt);
-                return expenseDate >= start && expenseDate <= end;
-            });
-            console.log(`🔍 按日期过滤: ${startDate} ~ ${endDate}, 结果数量: ${expenses.length}`);
-        }
-
-        // 按创建时间倒序排列
-        expenses.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-        // 分页处理
-        const pageNum = parseInt(page);
-        const limitNum = parseInt(limit);
-        const startIndex = (pageNum - 1) * limitNum;
-        const endIndex = startIndex + limitNum;
-        const paginatedExpenses = expenses.slice(startIndex, endIndex);
-
-        console.log(`📊 支出列表: 总数${expenses.length}, 当前页${pageNum}, 返回${paginatedExpenses.length}条`);
-
-        res.json({
-            success: true,
-            data: {
-                expenses: paginatedExpenses.map(expense => expense.toJSON()),
-                pagination: {
-                    current: pageNum,
-                    total: expenses.length,
-                    pages: Math.ceil(expenses.length / limitNum),
-                    limit: limitNum
-                }
-            }
-        });
-
-    } catch (error) {
-        console.error('❌ 获取支出列表错误:', error);
-        res.status(500).json({
-            success: false,
-            message: '服务器内部错误'
-        });
-    }
+  } catch (error) {
+    console.error('❌ 获取支出列表失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取支出列表失败',
+      error: error.message
+    });
+  }
 };
 
-/**
- * 获取支出统计信息
- */
-const getExpenseStatistics = async (req, res) => {
-    try {
-        console.log('📊 获取支出统计请求:', { userId: req.userId, query: req.query });
-        
-        const userId = req.userId;
-        const { period = 'month' } = req.query; // month, week, year
+// 获取单个支出记录
+exports.getExpenseById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log('📄 获取支出详情:', { id, userId: req.userId });
 
-        const now = new Date();
-        let startDate, endDate;
+    const expense = await Expense.findById(parseInt(id));
 
-        // 根据period确定时间范围
-        switch (period) {
-            case 'week':
-                const startOfWeek = new Date(now);
-                startOfWeek.setDate(now.getDate() - now.getDay());
-                startOfWeek.setHours(0, 0, 0, 0);
-                startDate = startOfWeek;
-                endDate = new Date(now);
-                break;
-            case 'year':
-                startDate = new Date(now.getFullYear(), 0, 1);
-                endDate = new Date(now);
-                break;
-            case 'month':
-            default:
-                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-                endDate = new Date(now);
-                break;
-        }
-
-        // 获取时间范围内的支出
-        const allExpenses = await Expense.findByUserId(userId);
-        const periodExpenses = allExpenses.filter(expense => {
-            const expenseDate = new Date(expense.createdAt);
-            return expenseDate >= startDate && expenseDate <= endDate;
-        });
-
-        // 计算总支出
-        const totalAmount = periodExpenses.reduce((sum, expense) => sum + expense.amount, 0);
-
-        // 按分类统计
-        const categoryStats = {};
-        periodExpenses.forEach(expense => {
-            if (!categoryStats[expense.category]) {
-                categoryStats[expense.category] = {
-                    amount: 0,
-                    count: 0,
-                    percentage: 0
-                };
-            }
-            categoryStats[expense.category].amount += expense.amount;
-            categoryStats[expense.category].count += 1;
-        });
-
-        // 计算分类百分比
-        Object.keys(categoryStats).forEach(category => {
-            categoryStats[category].percentage = totalAmount > 0 
-                ? (categoryStats[category].amount / totalAmount) * 100 
-                : 0;
-        });
-
-        // 计算日均支出
-        const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
-        const dailyAverage = daysDiff > 0 ? totalAmount / daysDiff : 0;
-
-        console.log(`📊 ${period}统计: 总支出¥${totalAmount}, 记录${periodExpenses.length}条, 日均¥${dailyAverage.toFixed(2)}`);
-
-        res.json({
-            success: true,
-            data: {
-                period,
-                startDate: startDate.toISOString(),
-                endDate: endDate.toISOString(),
-                totalAmount,
-                totalCount: periodExpenses.length,
-                dailyAverage: Math.round(dailyAverage * 100) / 100,
-                categoryStats
-            }
-        });
-
-    } catch (error) {
-        console.error('❌ 获取支出统计错误:', error);
-        res.status(500).json({
-            success: false,
-            message: '服务器内部错误'
-        });
+    if (!expense || !expense.belongsToUser(req.userId)) {
+      return res.status(404).json({
+        success: false,
+        message: '支出记录不存在'
+      });
     }
+
+    console.log('✅ 支出详情获取成功');
+
+    res.json({
+      success: true,
+      data: expense
+    });
+
+  } catch (error) {
+    console.error('❌ 获取支出详情失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取支出详情失败',
+      error: error.message
+    });
+  }
 };
 
-/**
- * 更新支出记录
- */
-const updateExpense = async (req, res) => {
-    try {
-        const { expenseId } = req.params;
-        const userId = req.userId;
-        const { amount, category, description } = req.body;
+// 更新支出记录
+exports.updateExpense = async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log('✏️ 更新支出记录:', { id, userId: req.userId, body: req.body });
 
-        console.log(`✏️ 更新支出请求: ID${expenseId}, 用户${userId}`);
-
-        // 查找支出记录
-        const expense = await Expense.findById(parseInt(expenseId));
-        if (!expense) {
-            return res.status(404).json({
-                success: false,
-                message: '支出记录不存在'
-            });
-        }
-
-        // 验证所有权
-        if (expense.userId !== userId) {
-            return res.status(403).json({
-                success: false,
-                message: '无权限修改此支出记录'
-            });
-        }
-
-        // 输入验证
-        if (amount && (amount <= 0 || amount > 100000)) {
-            return res.status(400).json({
-                success: false,
-                message: '支出金额必须在0-100000之间'
-            });
-        }
-
-        // 更新支出记录
-        const updateData = {};
-        if (amount !== undefined) updateData.amount = amount;
-        if (category !== undefined) updateData.category = category.trim();
-        if (description !== undefined) updateData.description = description.trim();
-
-        const updatedExpense = await Expense.updateById(parseInt(expenseId), updateData);
-
-        console.log(`✅ 支出记录更新成功: ID${expenseId}`);
-
-        res.json({
-            success: true,
-            message: '支出记录更新成功',
-            data: {
-                expense: updatedExpense.toJSON()
-            }
-        });
-
-    } catch (error) {
-        console.error('❌ 更新支出错误:', error);
-        res.status(500).json({
-            success: false,
-            message: '服务器内部错误'
-        });
+    const updateData = { ...req.body };
+    
+    // 处理日期
+    if (updateData.date) {
+      updateData.date = new Date(updateData.date);
     }
+    
+    // 处理金额
+    if (updateData.amount) {
+      updateData.amount = parseFloat(updateData.amount);
+    }
+
+    const expense = await Expense.updateById(parseInt(id), updateData);
+
+    if (!expense) {
+      return res.status(404).json({
+        success: false,
+        message: '支出记录不存在'
+      });
+    }
+
+    // 验证是否属于当前用户
+    if (!expense.belongsToUser(req.userId)) {
+      return res.status(403).json({
+        success: false,
+        message: '无权访问该支出记录'
+      });
+    }
+
+    console.log('✅ 支出记录更新成功');
+
+    res.json({
+      success: true,
+      message: '支出记录更新成功',
+      data: expense
+    });
+
+  } catch (error) {
+    console.error('❌ 更新支出记录失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '更新支出记录失败',
+      error: error.message
+    });
+  }
 };
 
-/**
- * 删除支出记录
- */
-const deleteExpense = async (req, res) => {
+// 删除支出记录
+exports.deleteExpense = async (req, res) => {
     try {
-        const { expenseId } = req.params;
-        const userId = req.userId;
+    const { id } = req.params;
+    console.log('🗑️ 删除支出记录:', { id, userId: req.userId });
 
-        console.log(`🗑️ 删除支出请求: ID${expenseId}, 用户${userId}`);
-
-        // 查找支出记录
-        const expense = await Expense.findById(parseInt(expenseId));
-        if (!expense) {
-            return res.status(404).json({
-                success: false,
-                message: '支出记录不存在'
-            });
-        }
-
-        // 验证所有权
-        if (expense.userId !== userId) {
-            return res.status(403).json({
-                success: false,
-                message: '无权限删除此支出记录'
-            });
-        }
-
-        // 删除支出记录
-        const success = await Expense.deleteById(parseInt(expenseId));
-
-        if (success) {
-            console.log(`✅ 支出记录删除成功: ID${expenseId}`);
-            res.json({
-                success: true,
-                message: '支出记录删除成功'
-            });
-        } else {
-            res.status(500).json({
-                success: false,
-                message: '删除失败'
-            });
-        }
-
-    } catch (error) {
-        console.error('❌ 删除支出错误:', error);
-        res.status(500).json({
-            success: false,
-            message: '服务器内部错误'
-        });
+    // 先检查记录是否存在且属于当前用户
+    const expense = await Expense.findById(parseInt(id));
+    
+    if (!expense || !expense.belongsToUser(req.userId)) {
+      return res.status(404).json({
+        success: false,
+        message: '支出记录不存在'
+      });
     }
+
+    // 删除记录
+    const deleted = await Expense.deleteById(parseInt(id));
+    
+    if (!deleted) {
+      return res.status(500).json({
+        success: false,
+        message: '删除失败'
+      });
+    }
+
+    console.log('✅ 支出记录删除成功');
+
+    res.json({
+      success: true,
+      message: '支出记录删除成功'
+    });
+
+  } catch (error) {
+    console.error('❌ 删除支出记录失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '删除支出记录失败',
+      error: error.message
+    });
+  }
 };
 
-/**
- * 获取支出分类列表
- */
-const getExpenseCategories = async (req, res) => {
-    try {
-        const categories = [
-            { name: '餐饮', icon: 'fork.knife', color: 'orange' },
-            { name: '交通', icon: 'car.fill', color: 'blue' },
-            { name: '购物', icon: 'bag.fill', color: 'pink' },
-            { name: '娱乐', icon: 'gamecontroller.fill', color: 'purple' },
-            { name: '医疗', icon: 'cross.fill', color: 'red' },
-            { name: '教育', icon: 'book.fill', color: 'green' },
-            { name: '住房', icon: 'house.fill', color: 'brown' },
-            { name: '其他', icon: 'ellipsis.circle.fill', color: 'gray' }
-        ];
+// 获取支出统计
+exports.getExpenseStats = async (req, res) => {
+  try {
+    console.log('📊 获取支出统计:', { userId: req.userId, query: req.query });
 
-        res.json({
-            success: true,
-            data: {
-                categories
-            }
-        });
-    } catch (error) {
-        console.error('❌ 获取分类列表错误:', error);
-        res.status(500).json({
-            success: false,
-            message: '服务器内部错误'
-        });
-    }
+    const { startDate, endDate, period = 'month' } = req.query;
+    const userId = req.userId;
+
+    // 构建时间范围
+    const startDateFilter = startDate ? new Date(startDate) : undefined;
+    const endDateFilter = endDate ? new Date(endDate) : undefined;
+
+    console.log('🔍 统计查询条件:', { userId, startDate: startDateFilter, endDate: endDateFilter });
+
+    // 按分类统计
+    const categoryStats = await Expense.getStatsByCategory(userId, startDateFilter, endDateFilter);
+
+    // 总计统计
+    const totalStatsResult = await Expense.getTotalByUser(userId, startDateFilter, endDateFilter);
+    const totalStats = totalStatsResult[0] || {
+      totalAmount: 0,
+      totalCount: 0,
+      avgAmount: 0,
+      maxAmount: 0,
+      minAmount: 0
+    };
+
+    // 按时间周期统计 (简化版本)
+    const periodStats = [];
+    // TODO: 后续可以添加更复杂的时间分组统计
+    console.log('📝 时间周期统计暂未实现，期间:', period);
+
+    console.log('✅ 支出统计获取成功:', {
+      categoryStatsCount: categoryStats.length,
+      totalStats,
+      periodStatsCount: periodStats.length
+    });
+
+    res.json({
+      success: true,
+      data: {
+        categoryStats,
+        totalStats,
+        periodStats
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ 获取支出统计失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取支出统计失败',
+      error: error.message
+    });
+  }
 };
 
-module.exports = {
-    addExpense,
-    getExpenses,
-    getExpenseStatistics,
-    updateExpense,
-    deleteExpense,
-    getExpenseCategories
+// 获取支出分类列表
+exports.getCategories = async (req, res) => {
+  try {
+    console.log('📋 获取支出分类列表');
+
+    // 从Expense模型导入分类列表
+    const categories = require('../models/Expense').CATEGORIES;
+
+    const categoriesWithInfo = [
+      { value: 'food', label: '餐饮', icon: '🍽️' },
+      { value: 'transport', label: '交通', icon: '🚗' },
+      { value: 'entertainment', label: '娱乐', icon: '🎮' },
+      { value: 'shopping', label: '购物', icon: '🛒' },
+      { value: 'bills', label: '账单', icon: '📄' },
+      { value: 'healthcare', label: '医疗', icon: '💊' },
+      { value: 'education', label: '教育', icon: '📚' },
+      { value: 'travel', label: '旅行', icon: '✈️' },
+      { value: 'other', label: '其他', icon: '📝' }
+    ];
+
+    console.log('✅ 分类列表获取成功，共', categoriesWithInfo.length, '个分类');
+
+    res.json({
+      success: true,
+      data: {
+        categories: categoriesWithInfo,
+        total: categoriesWithInfo.length
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ 获取分类列表失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取分类列表失败',
+      error: error.message
+    });
+  }
 };

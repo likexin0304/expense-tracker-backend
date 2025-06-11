@@ -5,10 +5,7 @@
 
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-
-// 简单的内存用户存储 - 在生产环境中应使用数据库
-let users = [];
-let currentId = 1;
+const User = require('../models/User');
 
 /**
  * 生成JWT令牌
@@ -51,7 +48,7 @@ exports.register = async (req, res) => {
         }
 
         // 验证邮箱唯一性
-        const existingUser = users.find(user => user.email === email);
+        const existingUser = await User.findByEmail(email);
         if (existingUser) {
             return res.status(400).json({
                 success: false,
@@ -62,32 +59,24 @@ exports.register = async (req, res) => {
         // 密码加密 - 使用bcrypt进行单向哈希
         const hashedPassword = await bcrypt.hash(password, 12);
 
-        // 创建新用户对象
-        const user = {
-            id: currentId++,        // 分配新ID
-            email,                  // 电子邮箱
-            password: hashedPassword, // 哈希后的密码
-            createdAt: new Date(),  // 创建时间
-            updatedAt: new Date()   // 更新时间
-        };
+        // 使用User模型创建新用户
+        const user = await User.create({
+            email,
+            password: hashedPassword
+        });
 
-        // 保存用户到内存数组
-        users.push(user);
-        console.log('✅ 新用户注册:', email, '用户总数:', users.length);
+        console.log('✅ 新用户注册:', email, '用户ID:', user.id);
 
         // 生成认证令牌
         const token = generateToken(user.id);
-
-        // 从返回结果中移除密码字段
-        const { password: _, ...userWithoutPassword } = user;
 
         // 返回成功响应
         res.status(201).json({
             success: true,
             message: '注册成功',
             data: {
-                user: userWithoutPassword, // 不含密码的用户信息
-                token                      // JWT认证令牌
+                user: user.toJSON(), // 使用User模型的toJSON方法，自动移除密码
+                token                // JWT认证令牌
             }
         });
 
@@ -120,11 +109,10 @@ exports.login = async (req, res) => {
             });
         }
 
-        // 查找用户是否存在
-        const user = users.find(user => user.email === email);
+        // 使用User模型查找用户
+        const user = await User.findByEmail(email);
         if (!user) {
-            // 用户不存在，返回错误
-            // 注意：为安全考虑，不指明是邮箱还是密码错误
+            console.log('❌ 用户不存在:', email);
             return res.status(401).json({
                 success: false,
                 message: '邮箱或密码错误'
@@ -134,7 +122,7 @@ exports.login = async (req, res) => {
         // 验证密码是否正确
         const isValidPassword = await bcrypt.compare(password, user.password);
         if (!isValidPassword) {
-            // 密码错误，返回错误
+            console.log('❌ 密码错误:', email);
             return res.status(401).json({
                 success: false,
                 message: '邮箱或密码错误'
@@ -144,9 +132,6 @@ exports.login = async (req, res) => {
         // 生成认证令牌
         const token = generateToken(user.id);
 
-        // 从返回结果中移除密码字段
-        const { password: _, ...userWithoutPassword } = user;
-
         console.log('✅ 用户登录成功:', email);
 
         // 返回成功响应
@@ -154,8 +139,8 @@ exports.login = async (req, res) => {
             success: true,
             message: '登录成功',
             data: {
-                user: userWithoutPassword, // 不含密码的用户信息
-                token                      // JWT认证令牌
+                user: user.toJSON(), // 使用User模型的toJSON方法，自动移除密码
+                token                // JWT认证令牌
             }
         });
 
@@ -174,13 +159,13 @@ exports.login = async (req, res) => {
  * 返回已认证用户的详细信息
  * 需要配合auth中间件使用
  */
-exports.getCurrentUser = (req, res) => {
+exports.getCurrentUser = async (req, res) => {
     try {
         // 从请求中获取用户ID（由auth中间件添加）
         const userId = req.userId;
         
-        // 查找用户
-        const user = users.find(user => user.id === userId);
+        // 使用User模型查找用户
+        const user = await User.findById(userId);
         
         if (!user) {
             return res.status(404).json({
@@ -189,13 +174,10 @@ exports.getCurrentUser = (req, res) => {
             });
         }
         
-        // 返回用户信息（不包含密码）
-        const { password, ...userWithoutPassword } = user;
-        
         res.json({
             success: true,
             data: {
-                user: userWithoutPassword
+                user: user.toJSON() // 使用User模型的toJSON方法
             }
         });
     } catch (error) {
@@ -210,22 +192,27 @@ exports.getCurrentUser = (req, res) => {
 /**
  * 获取所有用户列表（仅用于调试）
  */
-exports.getUsers = (req, res) => {
-    console.log('🔍 获取用户列表，当前用户数:', users.length);
-    
-    // 从所有用户对象中移除密码字段
-    const usersWithoutPasswords = users.map(user => {
-        const { password, ...userWithoutPassword } = user;
-        return userWithoutPassword;
-    });
-    
-    // 返回用户列表
-    res.json({
-        success: true,
-        message: '用户列表获取成功',
-        data: {
-            users: usersWithoutPasswords, // 不含密码的用户列表
-            total: users.length           // 用户总数
-        }
-    });
+exports.getUsers = async (req, res) => {
+    try {
+        // 使用User模型获取所有用户
+        const allUsers = await User.getAllUsers();
+        
+        console.log('🔍 获取用户列表，当前用户数:', allUsers.length);
+        
+        // 返回用户列表（toJSON已自动移除密码）
+        res.json({
+            success: true,
+            message: '用户列表获取成功',
+            data: {
+                users: allUsers.map(user => user.toJSON()),
+                total: allUsers.length
+            }
+        });
+    } catch (error) {
+        console.error('❌ 获取用户列表错误:', error);
+        res.status(500).json({
+            success: false,
+            message: '服务器内部错误'
+        });
+    }
 };

@@ -34,6 +34,11 @@ class User {
         return users.find(user => user.wechatOpenId === openId);
     }
 
+    // 获取所有用户（调试用）
+    static async getAllUsers() {
+        return users;
+    }
+
     // 获取用户信息（不包含密码）
     toJSON() {
         const { password, ...userWithoutPassword } = this;
