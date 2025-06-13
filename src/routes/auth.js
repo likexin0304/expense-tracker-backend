@@ -37,6 +37,14 @@ router.post('/login', authController.login);
 router.get('/me', authMiddleware, authController.getCurrentUser);
 
 /**
+ * 删除账号路由
+ * 软删除用户账号，需要确认文本验证
+ * 路径: DELETE /api/auth/account
+ * 需要认证：是
+ */
+router.delete('/account', authMiddleware, authController.deleteAccount);
+
+/**
  * 获取用户列表路由（仅用于调试）
  * 返回所有注册用户的列表（不含密码）
  * 路径: GET /api/auth/debug/users

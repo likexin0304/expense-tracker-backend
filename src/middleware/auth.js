@@ -4,6 +4,8 @@
  */
 
 const jwt = require('jsonwebtoken');
+const TokenBlacklist = require('../utils/tokenBlacklist');
+const User = require('../models/User');
 
 /**
  * 认证中间件函数
@@ -34,17 +36,54 @@ module.exports = (req, res, next) => {
         // 提取令牌
         const token = authHeader.split(' ')[1];
         
+        // 检查token是否在黑名单中
+        if (TokenBlacklist.isBlacklisted(token)) {
+            return res.status(401).json({
+                success: false,
+                message: '令牌已失效，请重新登录'
+            });
+        }
+        
         // 验证令牌
         const decodedToken = jwt.verify(
             token, 
             process.env.JWT_SECRET || 'default-secret'
         );
         
-        // 将用户ID添加到请求对象
-        req.userId = decodedToken.userId;
+        // 检查用户是否存在且未被删除
+        User.findByIdIncludeDeleted(decodedToken.userId).then(user => {
+            if (!user) {
+                return res.status(401).json({
+                    success: false,
+                    message: '用户不存在'
+                });
+            }
+            
+            if (user.isDeleted) {
+                // 用户已删除，将token加入黑名单
+                TokenBlacklist.addToken(token, user.id);
+                return res.status(401).json({
+                    success: false,
+                    message: '账号已删除，请重新注册'
+                });
+            }
+            
+            // 记录用户token（用于后续可能的批量失效）
+            TokenBlacklist.recordUserToken(decodedToken.userId, token);
+            
+            // 将用户ID添加到请求对象
+            req.userId = decodedToken.userId;
+            
+            // 继续处理请求
+            next();
+        }).catch(error => {
+            console.error('❌ 用户验证错误:', error);
+            res.status(500).json({
+                success: false,
+                message: '用户验证过程中发生错误'
+            });
+        });
         
-        // 继续处理请求
-        next();
     } catch (error) {
         console.error('❌ 认证错误:', error);
         

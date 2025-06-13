@@ -216,3 +216,86 @@ exports.getUsers = async (req, res) => {
         });
     }
 };
+
+/**
+ * 删除账号控制器
+ * 软删除用户账号，需要用户输入确认文本
+ * 删除后立即使所有相关JWT token失效
+ */
+exports.deleteAccount = async (req, res) => {
+    try {
+        console.log('🗑️ 删除账号请求，用户ID:', req.userId);
+        
+        // 从请求中获取确认文本
+        const { confirmationText } = req.body;
+        
+        // 验证确认文本
+        if (!confirmationText) {
+            return res.status(400).json({
+                success: false,
+                message: '请提供确认文本'
+            });
+        }
+        
+        // 检查确认文本是否包含"我确认"
+        if (!confirmationText.includes('我确认')) {
+            return res.status(400).json({
+                success: false,
+                message: '确认文本不正确，请输入包含"我确认"的文本'
+            });
+        }
+        
+        // 获取当前用户ID
+        const userId = req.userId;
+        
+        // 查找用户（包含已删除用户，防止重复删除）
+        const user = await User.findByIdIncludeDeleted(userId);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: '用户不存在'
+            });
+        }
+        
+        // 检查用户是否已被删除
+        if (user.isDeleted) {
+            return res.status(400).json({
+                success: false,
+                message: '账号已经被删除'
+            });
+        }
+        
+        // 执行软删除
+        const deletedUser = await User.softDelete(userId);
+        if (!deletedUser) {
+            return res.status(500).json({
+                success: false,
+                message: '删除账号失败'
+            });
+        }
+        
+        // 使该用户的所有JWT token失效
+        const TokenBlacklist = require('../utils/tokenBlacklist');
+        TokenBlacklist.blacklistUserTokens(userId);
+        
+        console.log('✅ 账号删除成功:', user.email, '用户ID:', userId);
+        console.log('📊 删除时间:', deletedUser.deletedAt);
+        
+        // 返回成功响应
+        res.json({
+            success: true,
+            message: '账号已成功删除',
+            data: {
+                deletedAt: deletedUser.deletedAt,
+                message: '您的账号已被永久删除，所有相关数据已保留但无法访问。感谢您使用我们的服务。'
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ 删除账号错误:', error);
+        res.status(500).json({
+            success: false,
+            message: '删除账号过程中发生错误'
+        });
+    }
+};

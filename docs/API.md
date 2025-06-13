@@ -178,15 +178,24 @@ Authorization: Bearer <token>
     "POST /api/auth/register",
     "POST /api/auth/login",
     "GET /api/auth/me",
+    "DELETE /api/auth/account",
     "GET /api/auth/debug/users (仅开发环境)",
     "POST /api/budget",
     "GET /api/budget/current",
+    "GET /api/budget/alerts",
+    "GET /api/budget/suggestions",
+    "GET /api/budget/history",
+    "GET /api/budget/:year/:month",
+    "DELETE /api/budget/:budgetId",
     "POST /api/expense",
     "GET /api/expense",
     "GET /api/expense/stats",
     "GET /api/expense/categories",
-    "PUT /api/expense/:expenseId",
-    "DELETE /api/expense/:expenseId"
+    "GET /api/expense/export",
+    "GET /api/expense/trends",
+    "GET /api/expense/:id",
+    "PUT /api/expense/:id",
+    "DELETE /api/expense/:id"
   ],
   "errorHandling": {
     "jsonParseErrors": "会提供详细的格式错误提示和修复建议",
@@ -303,11 +312,63 @@ Authorization: Bearer <token>
 }
 ```
 
+### 删除账号
+
+**DELETE /api/auth/account**
+
+软删除用户账号，账号删除后数据保留但无法访问
+
+**请求头:**
+```
+Authorization: Bearer <token>
+```
+
+**请求体:**
+```json
+{
+  "confirmationText": "我确认"
+}
+```
+
+> 注意：
+> - 确认文本必须包含"我确认"三个字
+> - 删除后账号无法恢复
+> - 所有相关JWT token将立即失效
+> - 用户数据会被保留但标记为已删除
+
+**成功响应 (200):**
+```json
+{
+  "success": true,
+  "message": "账号已成功删除",
+  "data": {
+    "deletedAt": "2024-01-15T15:30:00.000Z",
+    "message": "您的账号已被永久删除，所有相关数据已保留但无法访问。感谢您使用我们的服务。"
+  }
+}
+```
+
+**错误响应 (400) - 确认文本错误:**
+```json
+{
+  "success": false,
+  "message": "确认文本不正确，请输入包含\"我确认\"的文本"
+}
+```
+
+**错误响应 (400) - 账号已删除:**
+```json
+{
+  "success": false,
+  "message": "账号已经被删除"
+}
+```
+
 ### 获取所有用户列表 (调试用)
 
 **GET /api/auth/debug/users**
 
-获取所有注册用户的列表（仅用于开发调试）
+获取所有注册用户的列表（仅用于开发调试，不包含已删除用户）
 
 **成功响应 (200):**
 ```json
@@ -410,6 +471,189 @@ Authorization: Bearer <token>
       "month": 1
     }
   }
+}
+```
+
+### 获取预算提醒和预警
+
+**GET /api/budget/alerts**
+
+获取当前预算的提醒和预警信息
+
+**请求头:**
+```
+Authorization: Bearer <token>
+```
+
+**成功响应 (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "alerts": [
+      {
+        "type": "warning",
+        "level": "medium",
+        "title": "预算使用提醒",
+        "message": "本月预算已使用 75.5%，请注意控制支出",
+        "percentage": 75.5,
+        "icon": "💡"
+      }
+    ],
+    "summary": {
+      "budgetAmount": 3000,
+      "totalExpenses": 2265,
+      "usagePercentage": 75.5,
+      "remainingDays": 15,
+      "dailyAverage": 150.43,
+      "projectedMonthlySpend": 4513.3
+    }
+  }
+}
+```
+
+### 获取预算建议
+
+**GET /api/budget/suggestions**
+
+基于历史数据获取个性化预算建议
+
+**请求头:**
+```
+Authorization: Bearer <token>
+```
+
+**成功响应 (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "suggestions": [
+      {
+        "type": "suggestion",
+        "title": "预算建议",
+        "message": "根据您的历史支出数据，建议设置月预算为 ¥3300",
+        "icon": "💰",
+        "data": {
+          "suggestedAmount": 3300,
+          "averageSpend": 3000,
+          "basis": "基于历史平均支出 + 10% 缓冲"
+        }
+      },
+      {
+        "type": "insight",
+        "title": "支出分析",
+        "message": "您在\"餐饮\"类别的支出最多，占总支出的 35.2%",
+        "icon": "📊",
+        "data": {
+          "category": "餐饮",
+          "amount": 1056,
+          "percentage": 35.2
+        }
+      }
+    ],
+    "statistics": {
+      "totalMonths": 6,
+      "averageMonthlySpend": 3000,
+      "suggestedBudget": 3300,
+      "topCategory": "餐饮"
+    }
+  }
+}
+```
+
+### 获取预算历史
+
+**GET /api/budget/history**
+
+获取用户所有历史预算记录
+
+**请求头:**
+```
+Authorization: Bearer <token>
+```
+
+**成功响应 (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "budgets": [
+      {
+        "id": 1,
+        "userId": 1,
+        "amount": 5000.00,
+        "year": 2024,
+        "month": 1,
+        "createdAt": "2024-01-15T10:30:00.000Z",
+        "updatedAt": "2024-01-15T10:30:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+### 获取指定月份预算
+
+**GET /api/budget/:year/:month**
+
+获取指定年月的预算信息
+
+**请求头:**
+```
+Authorization: Bearer <token>
+```
+
+**路径参数:**
+- `year`: 年份 (如: 2024)
+- `month`: 月份 (1-12)
+
+**成功响应 (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "budget": {
+      "id": 1,
+      "userId": 1,
+      "amount": 5000.00,
+      "year": 2024,
+      "month": 1,
+      "createdAt": "2024-01-15T10:30:00.000Z",
+      "updatedAt": "2024-01-15T10:30:00.000Z"
+    },
+    "totalExpenses": 1250.50
+  }
+}
+```
+
+### 删除预算
+
+**DELETE /api/budget/:budgetId**
+
+删除指定的预算记录
+
+**请求头:**
+```
+Authorization: Bearer <token>
+```
+
+**路径参数:**
+- `budgetId`: 预算ID
+
+**成功响应 (200):**
+```json
+{
+  "success": true,
+  "message": "预算删除成功"
+}
+```
+
+**错误响应 (404):**
+```json
+{
+  "success": false,
+  "message": "预算不存在"
 }
 ```
 
@@ -735,6 +979,150 @@ Authorization: Bearer <token>
 }
 ```
 
+### 导出支出数据
+
+**GET /api/expense/export**
+
+导出用户的支出数据，支持JSON和CSV格式
+
+**请求头:**
+```
+Authorization: Bearer <token>
+```
+
+**查询参数:**
+- `format` (可选): 导出格式 ("json" 或 "csv")，默认为 "json"
+- `startDate` (可选): 开始日期 (ISO 8601格式)
+- `endDate` (可选): 结束日期 (ISO 8601格式)
+- `category` (可选): 按分类筛选
+- `download` (可选): 是否作为文件下载 ("true" 或 "false")，默认为 "false"
+
+**请求示例:**
+```
+GET /api/expense/export?format=csv&startDate=2024-01-01&endDate=2024-01-31&download=true
+```
+
+**JSON格式响应 (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "exportInfo": {
+      "exportDate": "2024-01-15T10:30:00.000Z",
+      "totalRecords": 25,
+      "dateRange": {
+        "start": "2024-01-01",
+        "end": "2024-01-31"
+      },
+      "category": "全部分类"
+    },
+    "expenses": [
+      {
+        "id": 1,
+        "amount": 299.99,
+        "category": "food",
+        "description": "午餐费用",
+        "date": "2024-01-15T12:30:00.000Z",
+        "location": "北京市朝阳区",
+        "paymentMethod": "支付宝",
+        "tags": ["工作餐", "午餐"],
+        "createdAt": "2024-01-15T12:35:00.000Z",
+        "updatedAt": "2024-01-15T12:35:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+**CSV格式响应 (200):**
+```
+Content-Type: text/csv; charset=utf-8
+Content-Disposition: attachment; filename="expenses_2024-01-15.csv"
+
+ID,金额,分类,描述,日期,地点,支付方式,标签,创建时间
+1,299.99,food,"午餐费用",2024-01-15,北京市朝阳区,支付宝,工作餐;午餐,2024-01-15
+```
+
+### 获取支出趋势分析
+
+**GET /api/expense/trends**
+
+获取支出趋势分析数据，支持按天、周、月分组统计
+
+**请求头:**
+```
+Authorization: Bearer <token>
+```
+
+**查询参数:**
+- `period` (可选): 统计周期 ("day", "week", "month")，默认为 "month"
+- `limit` (可选): 返回的时间段数量，默认为 12
+
+**请求示例:**
+```
+GET /api/expense/trends?period=month&limit=6
+```
+
+**成功响应 (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "period": "month",
+    "trends": [
+      {
+        "period": "2024-01",
+        "totalAmount": 3550.75,
+        "count": 65,
+        "categories": {
+          "food": 1250.50,
+          "transport": 680.00,
+          "entertainment": 420.25,
+          "shopping": 1200.00
+        }
+      },
+      {
+        "period": "2023-12",
+        "totalAmount": 2890.30,
+        "count": 52,
+        "categories": {
+          "food": 980.20,
+          "transport": 560.10,
+          "entertainment": 350.00,
+          "shopping": 1000.00
+        }
+      }
+    ],
+    "analysis": {
+      "totalPeriods": 6,
+      "averagePerPeriod": 3220.53,
+      "highestPeriod": {
+        "period": "2024-01",
+        "totalAmount": 3550.75,
+        "count": 65,
+        "categories": {
+          "food": 1250.50,
+          "transport": 680.00,
+          "entertainment": 420.25,
+          "shopping": 1200.00
+        }
+      },
+      "lowestPeriod": {
+        "period": "2023-12",
+        "totalAmount": 2890.30,
+        "count": 52,
+        "categories": {
+          "food": 980.20,
+          "transport": 560.10,
+          "entertainment": 350.00,
+          "shopping": 1000.00
+        }
+      }
+    }
+  }
+}
+```
+
 ### 获取支出统计
 
 **GET /api/expense/stats**
@@ -941,6 +1329,12 @@ curl -X POST http://localhost:3000/api/auth/login \
 # 获取当前用户信息（需要替换token）
 curl -X GET http://localhost:3000/api/auth/me \
   -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# 删除账号（需要替换token）
+curl -X DELETE http://localhost:3000/api/auth/account \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{"confirmationText":"我确认"}'
 
 # 设置预算（需要替换token）
 curl -X POST http://localhost:3000/api/budget \

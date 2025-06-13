@@ -353,3 +353,180 @@ exports.getCategories = async (req, res) => {
     });
   }
 };
+
+// 导出支出数据
+exports.exportExpenses = async (req, res) => {
+  try {
+    console.log('📤 导出支出数据请求:', { userId: req.userId, query: req.query });
+
+    const { format = 'json', startDate, endDate, category } = req.query;
+    const userId = req.userId;
+
+    // 构建查询选项
+    const options = {
+      category,
+      startDate: startDate ? new Date(startDate) : undefined,
+      endDate: endDate ? new Date(endDate) : undefined
+    };
+
+    // 获取所有符合条件的支出记录
+    const expenses = await Expense.findByUserId(userId, options);
+
+    console.log(`📊 准备导出 ${expenses.length} 条支出记录，格式: ${format}`);
+
+    if (format === 'csv') {
+      // CSV格式导出
+      const csvHeader = 'ID,金额,分类,描述,日期,地点,支付方式,标签,创建时间\n';
+      const csvData = expenses.map(expense => {
+        return [
+          expense.id,
+          expense.amount,
+          expense.category,
+          `"${expense.description.replace(/"/g, '""')}"`, // 处理CSV中的引号
+          expense.date.toISOString().split('T')[0], // 只保留日期部分
+          expense.location || '',
+          expense.paymentMethod,
+          expense.tags.join(';'),
+          expense.createdAt.toISOString().split('T')[0]
+        ].join(',');
+      }).join('\n');
+
+      const csvContent = csvHeader + csvData;
+
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="expenses_${new Date().toISOString().split('T')[0]}.csv"`);
+      res.send('\uFEFF' + csvContent); // 添加BOM以支持中文
+
+    } else {
+      // JSON格式导出
+      const exportData = {
+        exportInfo: {
+          exportDate: new Date().toISOString(),
+          totalRecords: expenses.length,
+          dateRange: {
+            start: startDate || '全部',
+            end: endDate || '全部'
+          },
+          category: category || '全部分类'
+        },
+        expenses: expenses.map(expense => ({
+          id: expense.id,
+          amount: expense.amount,
+          category: expense.category,
+          description: expense.description,
+          date: expense.date.toISOString(),
+          location: expense.location,
+          paymentMethod: expense.paymentMethod,
+          tags: expense.tags,
+          createdAt: expense.createdAt.toISOString(),
+          updatedAt: expense.updatedAt.toISOString()
+        }))
+      };
+
+      if (req.query.download === 'true') {
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `attachment; filename="expenses_${new Date().toISOString().split('T')[0]}.json"`);
+        res.send(JSON.stringify(exportData, null, 2));
+      } else {
+        res.json({
+          success: true,
+          data: exportData
+        });
+      }
+    }
+
+    console.log('✅ 支出数据导出成功');
+
+  } catch (error) {
+    console.error('❌ 导出支出数据失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '导出支出数据失败',
+      error: error.message
+    });
+  }
+};
+
+// 获取支出趋势分析
+exports.getExpenseTrends = async (req, res) => {
+  try {
+    console.log('📈 获取支出趋势分析:', { userId: req.userId, query: req.query });
+
+    const { period = 'month', limit = 12 } = req.query;
+    const userId = req.userId;
+
+    // 获取用户所有支出记录
+    const allExpenses = await Expense.findByUserId(userId);
+
+    // 按时间分组统计
+    const trends = {};
+    const now = new Date();
+
+    allExpenses.forEach(expense => {
+      const expenseDate = new Date(expense.date);
+      let key;
+
+      if (period === 'day') {
+        key = expenseDate.toISOString().split('T')[0]; // YYYY-MM-DD
+      } else if (period === 'week') {
+        const startOfWeek = new Date(expenseDate);
+        startOfWeek.setDate(expenseDate.getDate() - expenseDate.getDay());
+        key = startOfWeek.toISOString().split('T')[0];
+      } else { // month
+        key = `${expenseDate.getFullYear()}-${String(expenseDate.getMonth() + 1).padStart(2, '0')}`;
+      }
+
+      if (!trends[key]) {
+        trends[key] = {
+          period: key,
+          totalAmount: 0,
+          count: 0,
+          categories: {}
+        };
+      }
+
+      trends[key].totalAmount += expense.amount;
+      trends[key].count += 1;
+
+      if (!trends[key].categories[expense.category]) {
+        trends[key].categories[expense.category] = 0;
+      }
+      trends[key].categories[expense.category] += expense.amount;
+    });
+
+    // 转换为数组并排序
+    const trendArray = Object.values(trends)
+      .sort((a, b) => b.period.localeCompare(a.period))
+      .slice(0, parseInt(limit));
+
+    // 计算趋势指标
+    const analysis = {
+      totalPeriods: trendArray.length,
+      averagePerPeriod: trendArray.length > 0 ? 
+        trendArray.reduce((sum, trend) => sum + trend.totalAmount, 0) / trendArray.length : 0,
+      highestPeriod: trendArray.length > 0 ? 
+        trendArray.reduce((max, trend) => trend.totalAmount > max.totalAmount ? trend : max) : null,
+      lowestPeriod: trendArray.length > 0 ? 
+        trendArray.reduce((min, trend) => trend.totalAmount < min.totalAmount ? trend : min) : null
+    };
+
+    console.log(`✅ 趋势分析完成，共 ${trendArray.length} 个时间段`);
+
+    res.json({
+      success: true,
+      data: {
+        period,
+        trends: trendArray,
+        analysis
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ 获取支出趋势失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取支出趋势失败',
+      error: error.message
+    });
+  }
+};

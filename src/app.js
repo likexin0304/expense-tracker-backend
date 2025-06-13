@@ -122,17 +122,26 @@ app.get('/api/debug/routes', (req, res) => {
             'POST /api/auth/register',
             'POST /api/auth/login',
             'GET /api/auth/me',
+            'DELETE /api/auth/account',
             'GET /api/auth/debug/users (仅开发环境)',
             // 预算相关 (需要认证)
             'POST /api/budget',
             'GET /api/budget/current',
+            'GET /api/budget/alerts',
+            'GET /api/budget/suggestions',
+            'GET /api/budget/history',
+            'GET /api/budget/:year/:month',
+            'DELETE /api/budget/:budgetId',
             // 支出相关 (需要认证)
             'POST /api/expense',
             'GET /api/expense',
             'GET /api/expense/stats',
             'GET /api/expense/categories',
-            'PUT /api/expense/:expenseId',
-            'DELETE /api/expense/:expenseId'
+            'GET /api/expense/export',
+            'GET /api/expense/trends',
+            'GET /api/expense/:id',
+            'PUT /api/expense/:id',
+            'DELETE /api/expense/:id'
         ],
         errorHandling: {
             jsonParseErrors: '会提供详细的格式错误提示和修复建议',
