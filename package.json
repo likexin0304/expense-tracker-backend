@@ -1,6 +1,6 @@
 {
   "name": "expense-tracker-backend",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "费用追踪应用后端API - 强制缓存清除版本",
   "main": "server.js",
   "scripts": {
