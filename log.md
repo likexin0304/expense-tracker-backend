@@ -2258,3 +2258,44 @@ npx supabase db push
 4. 前端删除后刷新不重现
 
 ---
+
+## 2025-06-20 13:30:00 - 🐛 修复Vercel部署错误: 解决mixed routing properties问题
+
+### 🎯 问题确认
+- **GitHub Webhooks**: 为空，说明Vercel项目未正确连接
+- **Vercel部署失败**: Mixed routing properties错误
+- **根本原因**: `vercel.json`配置使用了不兼容的路由属性组合
+
+### 🔧 错误分析
+根据[Vercel文档](https://vercel.com/docs/errors/error-list#mixed-routing-properties)：
+- ❌ **旧配置**: 同时使用`builds` + `routes` + `headers`
+- ✅ **新配置**: 使用`rewrites` + `headers` + `functions`
+
+### 📝 修复措施
+1. **移除过时配置**:
+   - 删除`builds`数组
+   - 删除`routes`数组
+2. **使用现代配置**:
+   - 添加`rewrites`配置
+   - 添加`functions`配置指定运行时
+   - 保留`headers`配置
+
+### 🔄 配置对比
+```diff
+- "builds": [{"src": "server.js", "use": "@vercel/node"}]
+- "routes": [{"src": "/(.*)", "dest": "/server.js"}]
++ "rewrites": [{"source": "/(.*)", "destination": "/server.js"}]
++ "functions": {"server.js": {"runtime": "nodejs18.x"}}
+```
+
+### 🚀 部署状态
+- ✅ 代码已提交: `135bc66`
+- ✅ 已推送到GitHub: `main`分支
+- 🔄 Vercel应该能正常部署了
+
+### 🧪 预期结果
+1. Vercel部署成功，无mixed routing properties错误
+2. 自动创建GitHub webhook
+3. UUID删除功能修复生效
+
+---
