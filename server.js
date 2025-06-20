@@ -1,7 +1,13 @@
 /**
- * 服务器入口文件
- * 负责启动Express应用服务器并监听指定端口
+ * 费用追踪应用后端服务器
+ * 版本: 1.0.1 - 强制缓存清除
+ * 更新时间: 2025-06-20 13:10:00
+ * 修复: UUID处理问题，移除所有parseInt(id)调用
  */
+
+const express = require('express');
+const cors = require('cors');
+const dotenv = require('dotenv');
 
 // 导入配置好的Express应用实例
 const app = require('./src/app');
