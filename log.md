@@ -1,5 +1,71 @@
 # 更改日志
 
+## 2025-06-20（🐛 v1.0.6: 强制修复UUID删除问题）
+
+### 🚨 问题描述
+Vercel线上环境仍然存在UUID截断问题：
+- **错误日志**: `invalid input syntax for type uuid: "4513089"`
+- **完整UUID**: `4513089a-8823-466a-bbc2-411639a86f95` (36字符)
+- **传给数据库**: `"4513089"` (7字符)
+- **问题**: Vercel仍在使用旧版本代码，或存在缓存问题
+
+### 🔧 修复措施
+
+#### 1. 强化deleteExpense方法
+**文件**: `src/controllers/expenseController.js`
+- ✅ 添加详细调试日志 `[v1.0.5-latest]`
+- ✅ 添加UUID格式验证（长度必须为36字符）
+- ✅ 添加类型检查和错误处理
+- ✅ 在每个关键步骤添加ID追踪日志
+
+#### 2. 强制部署更新
+**文件**: `package.json`
+- ✅ 版本号: `1.0.5` → `1.0.6`
+- ✅ 清理依赖版本号
+
+**文件**: `server.js`
+- ✅ 更新版本信息到 v1.0.6
+- ✅ 添加强制部署时间戳
+- ✅ 添加详细启动日志
+
+#### 3. 代码验证
+- ✅ 确认本地代码无任何 `parseInt(id)` 调用
+- ✅ 确认 `Expense.findById()` 方法正确处理UUID
+- ✅ 确认 `Expense.deleteById()` 方法正确处理UUID
+
+### 📝 调试增强
+```javascript
+// 新增UUID验证
+if (!id || typeof id !== 'string' || id.length !== 36) {
+  console.error('❌ 无效的UUID格式:', { id, type: typeof id, length: id ? id.length : 'undefined' });
+  return res.status(400).json({
+    success: false,
+    message: '无效的支出记录ID格式'
+  });
+}
+```
+
+### 🚀 部署状态
+- ✅ 代码已提交: `git commit -m "🚀 v1.0.6: 强制修复UUID删除问题"`
+- ✅ 代码已推送: `git push origin main`
+- ⏳ 等待Vercel自动部署
+- 🔄 期待UUID删除功能正常工作
+
+### 🎯 预期结果
+1. **Vercel使用最新代码**: 调试日志显示 `[v1.0.5-latest]`
+2. **UUID完整传递**: 36字符UUID不被截断
+3. **删除功能正常**: 支出记录成功删除
+4. **前端显示正确**: 删除后记录真正消失
+
+### 📊 问题分析
+**根本原因**: Vercel部署缓存导致代码更新延迟生效
+**解决策略**: 
+- 强制版本号更新
+- 添加时间戳强制重新部署
+- 详细日志确认代码版本
+
+---
+
 ## 2024-06-17（🎉 Vercel 部署成功！）
 
 ### 🚀 Vercel 部署完成
