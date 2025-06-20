@@ -24,21 +24,16 @@
         },
         {
           "key": "X-Cache-Version",
-          "value": "1.0.3-fixed-routing"
+          "value": "1.0.4-runtime-fix"
         }
       ]
     }
   ],
-  "functions": {
-    "server.js": {
-      "runtime": "nodejs18.x"
-    }
-  },
   "env": {
     "NODE_ENV": "production",
-    "FORCE_DEPLOY": "2025-06-20-13:30",
+    "FORCE_DEPLOY": "2025-06-20-13:35",
     "FORCE_CACHE_CLEAR": "true",
-    "DEPLOYMENT_VERSION": "1.0.3",
-    "DEPLOY_TRIGGER": "routing-fix"
+    "DEPLOYMENT_VERSION": "1.0.4",
+    "DEPLOY_TRIGGER": "runtime-fix"
   }
 } 
