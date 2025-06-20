@@ -2138,3 +2138,38 @@ npx supabase db push
 - Supabase PostgreSQL数据库
 - JWT认证
 - Vercel部署
+
+# 费用追踪应用后端开发日志
+
+## 2025-06-20 10:47:00 - 删除功能Bug修复和代码重新部署
+
+### 🐛 问题发现
+- 用户报告删除支出记录后，筛选时删除的记录又重新出现
+- 经过详细调试发现关键问题：`expenseController.js`中使用`parseInt(id)`处理UUID类型的ID
+
+### 🔍 根本原因分析
+1. **UUID不能parseInt**：`parseInt("4f5a58b9-02eb-4781-9b07-a13ef16bdc8c")`返回`NaN`
+2. **数据库查询失败**：查询条件变成`id = NaN`，导致找不到任何记录
+3. **假象成功**：Supabase删除不存在的记录不报错，返回"成功"但实际没删除
+
+### ✅ 修复内容
+修改了`src/controllers/expenseController.js`中的三个方法：
+- `getExpenseById`：移除`parseInt(id)`，直接使用字符串ID
+- `updateExpense`：移除`Expense.updateById(parseInt(id), ...)`中的parseInt
+- `deleteExpense`：移除两处`parseInt(id)`调用
+
+### 🧪 修复验证
+- ✅ GET支出详情：正常返回完整数据
+- ✅ DELETE支出记录：成功删除，返回成功消息
+- ✅ 数据一致性：删除后记录真正从数据库移除
+
+### 📦 部署状态
+- ✅ 代码已提交到Git仓库
+- ✅ 已推送到远程仓库（GitHub）
+- ✅ Vercel会自动检测更改并重新部署
+
+### 📝 技术细节
+- **问题类型**：数据类型处理错误
+- **影响范围**：所有涉及UUID ID的CRUD操作
+- **修复方法**：移除不必要的parseInt转换
+- **部署方式**：通过Git推送触发Vercel自动部署
