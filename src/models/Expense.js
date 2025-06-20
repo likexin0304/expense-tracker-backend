@@ -161,10 +161,29 @@ class Expense {
      */
     static async findById(expenseId) {
         try {
-            console.log('🔍 Expense.findById 调用:', {
+            console.log('🔍 Expense.findById 调用开始:', {
                 expenseId,
                 type: typeof expenseId,
-                length: expenseId.length
+                length: expenseId ? expenseId.length : 'undefined',
+                isString: typeof expenseId === 'string',
+                originalValue: expenseId
+            });
+            
+            // 验证UUID格式
+            if (!expenseId || typeof expenseId !== 'string') {
+                console.error('❌ 无效的expenseId类型:', { expenseId, type: typeof expenseId });
+                throw new Error(`无效的支出ID格式: ${expenseId}`);
+            }
+            
+            if (expenseId.length !== 36) {
+                console.error('❌ 无效的UUID长度:', { expenseId, length: expenseId.length });
+                throw new Error(`无效的UUID长度: 期望36个字符，实际${expenseId.length}个字符`);
+            }
+            
+            console.log('🔍 准备执行Supabase查询，UUID:', {
+                expenseId,
+                length: expenseId.length,
+                beforeQuery: true
             });
             
             const { data, error } = await supabaseAdmin
@@ -173,17 +192,41 @@ class Expense {
                 .eq('id', expenseId)
                 .single();
             
+            console.log('🔍 Supabase查询完成:', {
+                hasData: !!data,
+                hasError: !!error,
+                errorCode: error?.code,
+                errorMessage: error?.message,
+                expenseIdUsed: expenseId
+            });
+            
             if (error) {
                 if (error.code === 'PGRST116') {
+                    console.log('📝 记录不存在 (PGRST116)');
                     return null;
                 }
-                console.error('❌ 查找支出记录失败:', error);
+                console.error('❌ 查找支出记录失败:', {
+                    error,
+                    expenseId,
+                    errorDetails: {
+                        code: error.code,
+                        message: error.message,
+                        details: error.details,
+                        hint: error.hint
+                    }
+                });
                 throw new Error(`查找支出记录失败: ${error.message}`);
             }
             
+            console.log('✅ 查找支出记录成功:', { expenseId, hasData: !!data });
             return data ? new Expense(data) : null;
         } catch (error) {
-            console.error('❌ 查找支出记录失败:', error);
+            console.error('❌ Expense.findById 异常:', {
+                error: error.message,
+                stack: error.stack,
+                expenseId,
+                expenseIdType: typeof expenseId
+            });
             throw error;
         }
     }
@@ -318,20 +361,59 @@ class Expense {
      */
     static async deleteById(expenseId) {
         try {
+            console.log('🗑️ Expense.deleteById 调用开始:', {
+                expenseId,
+                type: typeof expenseId,
+                length: expenseId ? expenseId.length : 'undefined',
+                isString: typeof expenseId === 'string'
+            });
+            
+            // 验证UUID格式
+            if (!expenseId || typeof expenseId !== 'string' || expenseId.length !== 36) {
+                console.error('❌ deleteById 无效的UUID:', { expenseId, type: typeof expenseId, length: expenseId ? expenseId.length : 'undefined' });
+                throw new Error(`无效的支出ID格式: ${expenseId}`);
+            }
+            
+            console.log('🗑️ 准备执行Supabase删除查询，UUID:', {
+                expenseId,
+                length: expenseId.length
+            });
+            
             const { error } = await supabaseAdmin
                 .from('expenses')
                 .delete()
                 .eq('id', expenseId);
             
+            console.log('🗑️ Supabase删除查询完成:', {
+                hasError: !!error,
+                errorCode: error?.code,
+                errorMessage: error?.message,
+                expenseIdUsed: expenseId
+            });
+            
             if (error) {
-                console.error('❌ 删除支出记录失败:', error);
+                console.error('❌ 删除支出记录失败:', {
+                    error,
+                    expenseId,
+                    errorDetails: {
+                        code: error.code,
+                        message: error.message,
+                        details: error.details,
+                        hint: error.hint
+                    }
+                });
                 throw new Error(`删除支出记录失败: ${error.message}`);
             }
             
-            console.log(`✅ 支出记录已删除: ID${expenseId}`);
+            console.log(`✅ 支出记录已删除成功: ID${expenseId}`);
             return true;
         } catch (error) {
-            console.error('❌ 删除支出记录失败:', error);
+            console.error('❌ Expense.deleteById 异常:', {
+                error: error.message,
+                stack: error.stack,
+                expenseId,
+                expenseIdType: typeof expenseId
+            });
             return false;
         }
     }
