@@ -177,7 +177,7 @@ const deleteBudget = async (req, res) => {
     try {
         const { budgetId } = req.params;
         
-        const success = await Budget.deleteById(parseInt(budgetId));
+        const success = await Budget.deleteById(budgetId);
         
         if (success) {
             res.json({
