@@ -1,4 +1,4 @@
-const Expense = require('../models/Expense');
+const { Expense } = require('../models/Expense');
 
 // 创建支出记录
 exports.createExpense = async (req, res) => {
@@ -135,7 +135,7 @@ exports.getExpenseById = async (req, res) => {
     const { id } = req.params;
     console.log('📄 获取支出详情:', { id, userId: req.userId });
 
-    const expense = await Expense.findById(parseInt(id));
+    const expense = await Expense.findById(id);
 
     if (!expense || !expense.belongsToUser(req.userId)) {
       return res.status(404).json({
@@ -179,7 +179,7 @@ exports.updateExpense = async (req, res) => {
       updateData.amount = parseFloat(updateData.amount);
     }
 
-    const expense = await Expense.updateById(parseInt(id), updateData);
+    const expense = await Expense.updateById(id, updateData);
 
     if (!expense) {
       return res.status(404).json({
@@ -221,7 +221,7 @@ exports.deleteExpense = async (req, res) => {
     console.log('🗑️ 删除支出记录:', { id, userId: req.userId });
 
     // 先检查记录是否存在且属于当前用户
-    const expense = await Expense.findById(parseInt(id));
+    const expense = await Expense.findById(id);
     
     if (!expense || !expense.belongsToUser(req.userId)) {
       return res.status(404).json({
@@ -231,7 +231,7 @@ exports.deleteExpense = async (req, res) => {
     }
 
     // 删除记录
-    const deleted = await Expense.deleteById(parseInt(id));
+    const deleted = await Expense.deleteById(id);
     
     if (!deleted) {
       return res.status(500).json({

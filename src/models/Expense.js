@@ -1,7 +1,9 @@
 /**
- * 支出数据模型
- * 管理用户的支出记录数据（内存存储版本）
+ * 支出数据模型 (Supabase版本)
+ * 管理用户的支出记录数据
  */
+
+const { supabaseAdmin } = require('../utils/supabase');
 
 // 支出分类枚举
 const CATEGORIES = [
@@ -24,67 +26,89 @@ const PAYMENT_METHODS = [
   'other'    // 其他
 ];
 
-// 内存存储
-let expenses = [];
-let currentExpenseId = 1;
-
 class Expense {
     constructor(data) {
-        this.id = currentExpenseId++;
-        this.userId = data.userId;
+        this.id = data.id;
+        this.userId = data.user_id;
         this.amount = parseFloat(data.amount);
         this.category = data.category;
         this.description = data.description;
         this.date = data.date ? new Date(data.date) : new Date();
         this.location = data.location || null;
-        this.paymentMethod = data.paymentMethod || 'cash';
-        this.isRecurring = data.isRecurring || false;
+        this.paymentMethod = data.payment_method || 'cash';
+        this.isRecurring = data.is_recurring || false;
         this.tags = data.tags || [];
         this.notes = data.notes || '';
-        this.createdAt = new Date();
-        this.updatedAt = new Date();
+        this.createdAt = data.created_at ? new Date(data.created_at) : new Date();
+        this.updatedAt = data.updated_at ? new Date(data.updated_at) : new Date();
+    }
 
-        // 验证数据
-        this.validate();
+    /**
+     * 创建带有用户认证上下文的Supabase客户端
+     * @param {string} userId - 用户ID
+     * @returns {Object} 配置了auth上下文的Supabase客户端
+     */
+    static getAuthenticatedClient(userId) {
+        // 创建一个新的客户端实例，设置auth上下文
+        const { createClient } = require('@supabase/supabase-js');
+        const client = createClient(
+            process.env.SUPABASE_URL,
+            process.env.SUPABASE_SERVICE_ROLE_KEY,
+            {
+                auth: {
+                    autoRefreshToken: false,
+                    persistSession: false
+                }
+            }
+        );
+        
+        // 设置auth上下文
+        client.auth.admin.setSession({
+            access_token: 'dummy',
+            refresh_token: 'dummy',
+            user: { id: userId }
+        });
+        
+        return client;
     }
 
     /**
      * 验证支出数据
      */
-    validate() {
-        if (!this.userId) {
+    static validateData(data) {
+        if (!data.userId) {
             throw new Error('用户ID不能为空');
         }
         
-        if (!this.amount || this.amount <= 0) {
+        if (!data.amount || parseFloat(data.amount) <= 0) {
             throw new Error('支出金额必须大于0');
         }
         
-        if (!this.category || !CATEGORIES.includes(this.category)) {
+        if (!data.category || !CATEGORIES.includes(data.category)) {
             throw new Error(`支出分类必须是有效值: ${CATEGORIES.join(', ')}`);
         }
         
-        if (!this.description || this.description.trim().length === 0) {
+        if (!data.description || data.description.trim().length === 0) {
             throw new Error('支出描述不能为空');
         }
         
-        if (this.description.length > 200) {
+        if (data.description.length > 200) {
             throw new Error('支出描述不能超过200个字符');
         }
         
-        if (this.location && this.location.length > 100) {
+        if (data.location && data.location.length > 100) {
             throw new Error('支出地点不能超过100个字符');
         }
         
-        if (this.paymentMethod && !PAYMENT_METHODS.includes(this.paymentMethod)) {
+        if (data.paymentMethod && !PAYMENT_METHODS.includes(data.paymentMethod)) {
             throw new Error(`支付方式必须是有效值: ${PAYMENT_METHODS.join(', ')}`);
         }
         
-        if (this.tags && this.tags.length > 10) {
+        if (data.tags && data.tags.length > 10) {
             throw new Error('标签数量不能超过10个');
         }
         
-        if (this.notes && this.notes.length > 500) {
+        if (data.notes && data.notes.length > 500) {
             throw new Error('备注不能超过500个字符');
         }
     }
@@ -95,266 +119,355 @@ class Expense {
      * @returns {Expense} 支出对象
      */
     static async create(expenseData) {
-        const expense = new Expense(expenseData);
-        expenses.push(expense);
-        console.log(`✅ 支出记录已创建: 用户${expense.userId} ¥${expense.amount} ${expense.description}`);
-        return expense;
+        try {
+            // 验证数据
+            Expense.validateData(expenseData);
+            
+            // 使用service role key绕过RLS，但仍然检查用户权限
+            const { data, error } = await supabaseAdmin
+                .from('expenses')
+                .insert({
+                    user_id: expenseData.userId,
+                    amount: parseFloat(expenseData.amount),
+                    category: expenseData.category,
+                    description: expenseData.description,
+                    date: expenseData.date || new Date().toISOString(),
+                    location: expenseData.location || null,
+                    payment_method: expenseData.paymentMethod || 'cash',
+                    is_recurring: expenseData.isRecurring || false,
+                    tags: expenseData.tags || [],
+                    notes: expenseData.notes || ''
+                })
+                .select()
+                .single();
+            
+            if (error) {
+                console.error('❌ 创建支出记录失败:', error);
+                throw new Error(`创建支出记录失败: ${error.message}`);
+            }
+            
+            console.log(`✅ 支出记录已创建: 用户${expenseData.userId} ¥${expenseData.amount} ${expenseData.description}`);
+            return new Expense(data);
+        } catch (error) {
+            console.error('❌ 创建支出记录失败:', error);
+            throw error;
+        }
     }
 
     /**
      * 根据ID查找支出记录
-     * @param {number} expenseId - 支出ID
+     * @param {string} expenseId - 支出ID
      * @returns {Expense|null} 支出对象或null
      */
     static async findById(expenseId) {
-        return expenses.find(expense => expense.id === expenseId) || null;
+        try {
+            const { data, error } = await supabaseAdmin
+                .from('expenses')
+                .select('*')
+                .eq('id', expenseId)
+                .single();
+            
+            if (error) {
+                if (error.code === 'PGRST116') {
+                    return null;
+                }
+                console.error('❌ 查找支出记录失败:', error);
+                throw new Error(`查找支出记录失败: ${error.message}`);
+            }
+            
+            return data ? new Expense(data) : null;
+        } catch (error) {
+            console.error('❌ 查找支出记录失败:', error);
+            throw error;
+        }
     }
 
     /**
      * 根据用户ID获取支出记录
-     * @param {number} userId - 用户ID
+     * @param {string} userId - 用户ID
      * @param {Object} options - 查询选项
      * @returns {Array} 支出记录列表
      */
     static async findByUserId(userId, options = {}) {
-        let userExpenses = expenses.filter(expense => expense.userId === userId);
-        
-        // 日期过滤
-        if (options.startDate) {
-            const startDate = new Date(options.startDate);
-            userExpenses = userExpenses.filter(expense => expense.date >= startDate);
+        try {
+            let query = supabaseAdmin
+                .from('expenses')
+                .select('*')
+                .eq('user_id', userId);
+            
+            // 日期过滤
+            if (options.startDate) {
+                query = query.gte('date', options.startDate);
+            }
+            
+            if (options.endDate) {
+                query = query.lte('date', options.endDate);
+            }
+            
+            // 分类过滤
+            if (options.category) {
+                query = query.eq('category', options.category);
+            }
+            
+            // 排序
+            if (options.sort === 'date_desc') {
+                query = query.order('date', { ascending: false });
+            } else if (options.sort === 'amount_desc') {
+                query = query.order('amount', { ascending: false });
+            } else {
+                query = query.order('created_at', { ascending: false });
+            }
+            
+            // 分页
+            if (options.limit) {
+                const offset = options.offset || 0;
+                query = query.range(offset, offset + options.limit - 1);
+            }
+            
+            const { data, error } = await query;
+            
+            if (error) {
+                console.error('❌ 获取用户支出记录失败:', error);
+                throw new Error(`获取支出记录失败: ${error.message}`);
+            }
+            
+            console.log(`✅ 查询到 ${data.length} 条支出记录`);
+            return data.map(expense => new Expense(expense));
+        } catch (error) {
+            console.error('❌ 获取用户支出记录失败:', error);
+            throw error;
         }
-        
-        if (options.endDate) {
-            const endDate = new Date(options.endDate);
-            userExpenses = userExpenses.filter(expense => expense.date <= endDate);
-        }
-        
-        // 分类过滤
-        if (options.category) {
-            userExpenses = userExpenses.filter(expense => expense.category === options.category);
-        }
-        
-        // 排序
-        if (options.sort === 'date_desc') {
-            userExpenses.sort((a, b) => b.date - a.date);
-        } else if (options.sort === 'amount_desc') {
-            userExpenses.sort((a, b) => b.amount - a.amount);
-        } else {
-            userExpenses.sort((a, b) => b.createdAt - a.createdAt);
-        }
-        
-        // 分页
-        if (options.limit) {
-            const offset = options.offset || 0;
-            userExpenses = userExpenses.slice(offset, offset + options.limit);
-        }
-        
-        return userExpenses;
     }
 
     /**
      * 更新支出记录
-     * @param {number} expenseId - 支出ID
+     * @param {string} expenseId - 支出ID
      * @param {Object} updateData - 更新数据
      * @returns {Expense|null} 更新后的支出对象
      */
     static async updateById(expenseId, updateData) {
-        const expenseIndex = expenses.findIndex(expense => expense.id === expenseId);
-        
-        if (expenseIndex === -1) {
-            return null;
+        try {
+            // 验证更新数据
+            if (updateData.amount !== undefined || updateData.category !== undefined || 
+                updateData.description !== undefined) {
+                // 获取原始数据并合并更新数据进行验证
+                const original = await Expense.findById(expenseId);
+                if (!original) {
+                    return null;
+                }
+                
+                const mergedData = {
+                    userId: original.userId,
+                    amount: updateData.amount !== undefined ? updateData.amount : original.amount,
+                    category: updateData.category !== undefined ? updateData.category : original.category,
+                    description: updateData.description !== undefined ? updateData.description : original.description,
+                    paymentMethod: updateData.paymentMethod !== undefined ? updateData.paymentMethod : original.paymentMethod,
+                    tags: updateData.tags !== undefined ? updateData.tags : original.tags,
+                    notes: updateData.notes !== undefined ? updateData.notes : original.notes,
+                    location: updateData.location !== undefined ? updateData.location : original.location
+                };
+                
+                Expense.validateData(mergedData);
+            }
+            
+            // 构建更新对象
+            const updateObj = {
+                updated_at: new Date().toISOString()
+            };
+            
+            if (updateData.amount !== undefined) updateObj.amount = parseFloat(updateData.amount);
+            if (updateData.category !== undefined) updateObj.category = updateData.category;
+            if (updateData.description !== undefined) updateObj.description = updateData.description;
+            if (updateData.date !== undefined) updateObj.date = updateData.date;
+            if (updateData.location !== undefined) updateObj.location = updateData.location;
+            if (updateData.paymentMethod !== undefined) updateObj.payment_method = updateData.paymentMethod;
+            if (updateData.isRecurring !== undefined) updateObj.is_recurring = updateData.isRecurring;
+            if (updateData.tags !== undefined) updateObj.tags = updateData.tags;
+            if (updateData.notes !== undefined) updateObj.notes = updateData.notes;
+            
+            const { data, error } = await supabaseAdmin
+                .from('expenses')
+                .update(updateObj)
+                .eq('id', expenseId)
+                .select()
+                .single();
+            
+            if (error) {
+                console.error('❌ 更新支出记录失败:', error);
+                throw new Error(`更新支出记录失败: ${error.message}`);
+            }
+            
+            console.log(`✅ 支出记录已更新: ID${expenseId}`);
+            return data ? new Expense(data) : null;
+        } catch (error) {
+            console.error('❌ 更新支出记录失败:', error);
+            throw error;
         }
-        
-        const expense = expenses[expenseIndex];
-        
-        // 更新字段
-        if (updateData.amount !== undefined) expense.amount = parseFloat(updateData.amount);
-        if (updateData.category !== undefined) expense.category = updateData.category;
-        if (updateData.description !== undefined) expense.description = updateData.description;
-        if (updateData.date !== undefined) expense.date = new Date(updateData.date);
-        if (updateData.location !== undefined) expense.location = updateData.location;
-        if (updateData.paymentMethod !== undefined) expense.paymentMethod = updateData.paymentMethod;
-        if (updateData.isRecurring !== undefined) expense.isRecurring = updateData.isRecurring;
-        if (updateData.tags !== undefined) expense.tags = updateData.tags;
-        if (updateData.notes !== undefined) expense.notes = updateData.notes;
-        
-        expense.updatedAt = new Date();
-        
-        // 重新验证
-        expense.validate();
-        
-        console.log(`✅ 支出记录已更新: ID${expenseId}`);
-        return expense;
     }
 
     /**
      * 删除支出记录
-     * @param {number} expenseId - 支出ID
+     * @param {string} expenseId - 支出ID
      * @returns {boolean} 是否删除成功
      */
     static async deleteById(expenseId) {
-        const expenseIndex = expenses.findIndex(expense => expense.id === expenseId);
-        
-        if (expenseIndex !== -1) {
-            expenses.splice(expenseIndex, 1);
+        try {
+            const { error } = await supabaseAdmin
+                .from('expenses')
+                .delete()
+                .eq('id', expenseId);
+            
+            if (error) {
+                console.error('❌ 删除支出记录失败:', error);
+                throw new Error(`删除支出记录失败: ${error.message}`);
+            }
+            
             console.log(`✅ 支出记录已删除: ID${expenseId}`);
             return true;
+        } catch (error) {
+            console.error('❌ 删除支出记录失败:', error);
+            return false;
         }
-        
-        return false;
     }
 
     /**
-     * 按分类获取统计
-     * @param {number} userId - 用户ID
-     * @param {Date} startDate - 开始日期
-     * @param {Date} endDate - 结束日期
-     * @returns {Array} 分类统计
+     * 按分类统计支出
+     * @param {string} userId - 用户ID
+     * @param {string} startDate - 开始日期
+     * @param {string} endDate - 结束日期
+     * @returns {Array} 分类统计结果
      */
     static async getStatsByCategory(userId, startDate, endDate) {
-        let userExpenses = expenses.filter(expense => expense.userId === userId);
-        
-        // 日期过滤
-        if (startDate) {
-            userExpenses = userExpenses.filter(expense => expense.date >= startDate);
-        }
-        if (endDate) {
-            userExpenses = userExpenses.filter(expense => expense.date <= endDate);
-        }
-        
-        // 按分类统计
-        const stats = {};
-        userExpenses.forEach(expense => {
-            if (!stats[expense.category]) {
-                stats[expense.category] = {
-                    _id: expense.category,
-                    total: 0,
-                    count: 0,
-                    amounts: []
-                };
+        try {
+            let query = supabaseAdmin
+                .from('expenses')
+                .select('category, amount')
+                .eq('user_id', userId);
+            
+            if (startDate) {
+                query = query.gte('date', startDate);
             }
-            stats[expense.category].total += expense.amount;
-            stats[expense.category].count += 1;
-            stats[expense.category].amounts.push(expense.amount);
-        });
-        
-        // 计算平均值并排序
-        const result = Object.values(stats).map(stat => ({
-            _id: stat._id,
-            total: parseFloat(stat.total.toFixed(2)),
-            count: stat.count,
-            avgAmount: parseFloat((stat.total / stat.count).toFixed(2))
-        }));
-        
-        return result.sort((a, b) => b.total - a.total);
+            
+            if (endDate) {
+                query = query.lte('date', endDate);
+            }
+            
+            const { data, error } = await query;
+            
+            if (error) {
+                console.error('❌ 获取分类统计失败:', error);
+                throw new Error(`获取分类统计失败: ${error.message}`);
+            }
+            
+            // 按分类分组统计
+            const stats = {};
+            if (data) {
+                data.forEach(expense => {
+                    if (!stats[expense.category]) {
+                        stats[expense.category] = {
+                            category: expense.category,
+                            total: 0,
+                            count: 0
+                        };
+                    }
+                    stats[expense.category].total += expense.amount;
+                    stats[expense.category].count += 1;
+                });
+            }
+            
+            return Object.values(stats);
+        } catch (error) {
+            console.error('❌ 获取分类统计失败:', error);
+            throw error;
+        }
     }
 
     /**
-     * 获取用户总支出统计
-     * @param {number} userId - 用户ID
-     * @param {Date} startDate - 开始日期
-     * @param {Date} endDate - 结束日期
-     * @returns {Object} 总支出统计
+     * 获取用户总支出
+     * @param {string} userId - 用户ID
+     * @param {string} startDate - 开始日期
+     * @param {string} endDate - 结束日期
+     * @returns {number} 总支出金额
      */
     static async getTotalByUser(userId, startDate, endDate) {
-        let userExpenses = expenses.filter(expense => expense.userId === userId);
-        
-        // 日期过滤
-        if (startDate) {
-            userExpenses = userExpenses.filter(expense => expense.date >= startDate);
+        try {
+            let query = supabaseAdmin
+                .from('expenses')
+                .select('amount')
+                .eq('user_id', userId);
+            
+            if (startDate) {
+                query = query.gte('date', startDate);
+            }
+            
+            if (endDate) {
+                query = query.lte('date', endDate);
+            }
+            
+            const { data, error } = await query;
+            
+            if (error) {
+                console.error('❌ 获取用户总支出失败:', error);
+                throw new Error(`获取用户总支出失败: ${error.message}`);
+            }
+            
+            return data ? data.reduce((total, expense) => total + expense.amount, 0) : 0;
+        } catch (error) {
+            console.error('❌ 获取用户总支出失败:', error);
+            throw error;
         }
-        if (endDate) {
-            userExpenses = userExpenses.filter(expense => expense.date <= endDate);
-        }
-        
-        if (userExpenses.length === 0) {
-            return [{
-                _id: null,
-                totalAmount: 0,
-                totalCount: 0,
-                avgAmount: 0,
-                maxAmount: 0,
-                minAmount: 0
-            }];
-        }
-        
-        const amounts = userExpenses.map(expense => expense.amount);
-        const totalAmount = amounts.reduce((sum, amount) => sum + amount, 0);
-        
-        return [{
-            _id: null,
-            totalAmount: parseFloat(totalAmount.toFixed(2)),
-            totalCount: userExpenses.length,
-            avgAmount: parseFloat((totalAmount / userExpenses.length).toFixed(2)),
-            maxAmount: Math.max(...amounts),
-            minAmount: Math.min(...amounts)
-        }];
     }
 
     /**
-     * 检查是否属于当前用户
-     * @param {number} userId - 用户ID
-     * @returns {boolean} 是否属于当前用户
+     * 获取当前月份总支出
+     * @param {string} userId - 用户ID
+     * @returns {number} 当前月份总支出
+     */
+    static async getCurrentMonthTotal(userId) {
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString();
+        
+        return await Expense.getTotalByUser(userId, startOfMonth, endOfMonth);
+    }
+
+    /**
+     * 获取指定月份总支出
+     * @param {string} userId - 用户ID
+     * @param {number} year - 年份
+     * @param {number} month - 月份
+     * @returns {number} 指定月份总支出
+     */
+    static async getMonthlyTotal(userId, year, month) {
+        const startOfMonth = new Date(year, month - 1, 1).toISOString();
+        const endOfMonth = new Date(year, month, 0).toISOString();
+        
+        return await Expense.getTotalByUser(userId, startOfMonth, endOfMonth);
+    }
+
+    /**
+     * 检查支出是否属于指定用户
+     * @param {string} userId - 用户ID
+     * @returns {boolean} 是否属于该用户
      */
     belongsToUser(userId) {
         return this.userId === userId;
     }
 
     /**
-     * 获取格式化金额
-     * @returns {string} 格式化金额
+     * 格式化金额显示
+     * @returns {string} 格式化后的金额
      */
     get formattedAmount() {
         return `¥${this.amount.toFixed(2)}`;
     }
 
     /**
-     * 获取格式化日期
-     * @returns {string} 格式化日期
+     * 格式化日期显示
+     * @returns {string} 格式化后的日期
      */
     get formattedDate() {
         return this.date.toLocaleDateString('zh-CN');
-    }
-
-    /**
-     * 获取当前月份总支出
-     * @param {number} userId - 用户ID
-     * @returns {number} 当前月份总支出
-     */
-    static async getCurrentMonthTotal(userId) {
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = now.getMonth() + 1;
-        return await Expense.getMonthlyTotal(userId, year, month);
-    }
-
-    /**
-     * 获取指定月份总支出
-     * @param {number} userId - 用户ID
-     * @param {number} year - 年份
-     * @param {number} month - 月份 (1-12)
-     * @returns {number} 指定月份总支出
-     */
-    static async getMonthlyTotal(userId, year, month) {
-        const userExpenses = expenses.filter(expense => {
-            if (expense.userId !== userId) return false;
-            
-            const expenseDate = new Date(expense.date);
-            return expenseDate.getFullYear() === year && 
-                   (expenseDate.getMonth() + 1) === month;
-        });
-        
-        const total = userExpenses.reduce((sum, expense) => sum + expense.amount, 0);
-        return parseFloat(total.toFixed(2));
-    }
-
-    /**
-     * 获取所有支出（调试用）
-     * @returns {Array} 所有支出列表
-     */
-    static getAllExpenses() {
-        return expenses;
     }
 
     /**
@@ -382,7 +495,9 @@ class Expense {
     }
 }
 
-// 导出类和常量
-module.exports = Expense;
-module.exports.CATEGORIES = CATEGORIES;
-module.exports.PAYMENT_METHODS = PAYMENT_METHODS;
+// 导出类和枚举
+module.exports = {
+    Expense,
+    CATEGORIES,
+    PAYMENT_METHODS
+};

@@ -3,22 +3,9 @@
  * 处理用户注册、登录和身份验证的核心逻辑
  */
 
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+const { supabase, supabaseAdmin } = require('../utils/supabase');
 const User = require('../models/User');
-
-/**
- * 生成JWT令牌
- * @param {number} userId - 用户ID
- * @returns {string} 生成的JWT令牌
- */
-const generateToken = (userId) => {
-    return jwt.sign(
-        { userId },                               // 令牌载荷
-        process.env.JWT_SECRET || 'default-secret', // 签名密钥
-        { expiresIn: '7d' }                       // 7天过期
-    );
-};
+const TokenBlacklist = require('../utils/tokenBlacklist');
 
 /**
  * 用户注册控制器
@@ -56,27 +43,29 @@ exports.register = async (req, res) => {
             });
         }
 
-        // 密码加密 - 使用bcrypt进行单向哈希
-        const hashedPassword = await bcrypt.hash(password, 12);
-
-        // 使用User模型创建新用户
+        // 使用Supabase创建用户
         const user = await User.create({
             email,
-            password: hashedPassword
+            password
         });
 
         console.log('✅ 新用户注册:', email, '用户ID:', user.id);
 
-        // 生成认证令牌
-        const token = generateToken(user.id);
+        // 使用Supabase登录获取会话
+        const { data: sessionData, error: sessionError } = await supabase.auth.signInWithPassword({
+            email,
+            password
+        });
+
+        if (sessionError) throw sessionError;
 
         // 返回成功响应
         res.status(201).json({
             success: true,
             message: '注册成功',
             data: {
-                user: user.toJSON(), // 使用User模型的toJSON方法，自动移除密码
-                token                // JWT认证令牌
+                user: user.toJSON(),
+                token: sessionData.session.access_token
             }
         });
 
@@ -85,7 +74,8 @@ exports.register = async (req, res) => {
         console.error('❌ 注册错误:', error);
         res.status(500).json({
             success: false,
-            message: '服务器内部错误'
+            message: '服务器内部错误',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 };
@@ -109,28 +99,29 @@ exports.login = async (req, res) => {
             });
         }
 
-        // 使用User模型查找用户
-        const user = await User.findByEmail(email);
+        // 使用Supabase进行身份验证
+        const { data: sessionData, error: sessionError } = await supabase.auth.signInWithPassword({
+            email,
+            password
+        });
+
+        if (sessionError) {
+            console.log('❌ 登录失败:', sessionError.message);
+            return res.status(401).json({
+                success: false,
+                message: '邮箱或密码错误'
+            });
+        }
+
+        // 获取用户信息
+        const user = await User.findById(sessionData.user.id);
         if (!user) {
             console.log('❌ 用户不存在:', email);
             return res.status(401).json({
                 success: false,
-                message: '邮箱或密码错误'
+                message: '用户不存在'
             });
         }
-
-        // 验证密码是否正确
-        const isValidPassword = await bcrypt.compare(password, user.password);
-        if (!isValidPassword) {
-            console.log('❌ 密码错误:', email);
-            return res.status(401).json({
-                success: false,
-                message: '邮箱或密码错误'
-            });
-        }
-
-        // 生成认证令牌
-        const token = generateToken(user.id);
 
         console.log('✅ 用户登录成功:', email);
 
@@ -139,8 +130,8 @@ exports.login = async (req, res) => {
             success: true,
             message: '登录成功',
             data: {
-                user: user.toJSON(), // 使用User模型的toJSON方法，自动移除密码
-                token                // JWT认证令牌
+                user: user.toJSON(),
+                token: sessionData.session.access_token
             }
         });
 
@@ -149,7 +140,8 @@ exports.login = async (req, res) => {
         console.error('❌ 登录错误:', error);
         res.status(500).json({
             success: false,
-            message: '服务器内部错误'
+            message: '服务器内部错误',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 };
@@ -177,14 +169,15 @@ exports.getCurrentUser = async (req, res) => {
         res.json({
             success: true,
             data: {
-                user: user.toJSON() // 使用User模型的toJSON方法
+                user: user.toJSON()
             }
         });
     } catch (error) {
         console.error('❌ 获取用户信息错误:', error);
         res.status(500).json({
             success: false,
-            message: '服务器内部错误'
+            message: '服务器内部错误',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 };
@@ -199,7 +192,7 @@ exports.getUsers = async (req, res) => {
         
         console.log('🔍 获取用户列表，当前用户数:', allUsers.length);
         
-        // 返回用户列表（toJSON已自动移除密码）
+        // 返回用户列表
         res.json({
             success: true,
             message: '用户列表获取成功',
@@ -212,7 +205,8 @@ exports.getUsers = async (req, res) => {
         console.error('❌ 获取用户列表错误:', error);
         res.status(500).json({
             success: false,
-            message: '服务器内部错误'
+            message: '服务器内部错误',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 };
@@ -248,7 +242,7 @@ exports.deleteAccount = async (req, res) => {
         // 获取当前用户ID
         const userId = req.userId;
         
-        // 查找用户（包含已删除用户，防止重复删除）
+        // 检查用户是否存在
         const user = await User.findByIdIncludeDeleted(userId);
         if (!user) {
             return res.status(404).json({
@@ -265,23 +259,16 @@ exports.deleteAccount = async (req, res) => {
             });
         }
         
-        // 执行软删除
+        // 软删除用户
         const deletedUser = await User.softDelete(userId);
-        if (!deletedUser) {
-            return res.status(500).json({
-                success: false,
-                message: '删除账号失败'
-            });
-        }
         
-        // 使该用户的所有JWT token失效
-        const TokenBlacklist = require('../utils/tokenBlacklist');
-        TokenBlacklist.blacklistUserTokens(userId);
+        // 使用户的所有token失效
+        const authHeader = req.headers.authorization;
+        const token = authHeader.split(' ')[1];
+        TokenBlacklist.invalidateAllUserTokens(userId, token);
         
-        console.log('✅ 账号删除成功:', user.email, '用户ID:', userId);
-        console.log('📊 删除时间:', deletedUser.deletedAt);
+        console.log('✅ 用户账号已删除，ID:', userId);
         
-        // 返回成功响应
         res.json({
             success: true,
             message: '账号已成功删除',
@@ -290,12 +277,12 @@ exports.deleteAccount = async (req, res) => {
                 message: '您的账号已被永久删除，所有相关数据已保留但无法访问。感谢您使用我们的服务。'
             }
         });
-        
     } catch (error) {
         console.error('❌ 删除账号错误:', error);
         res.status(500).json({
             success: false,
-            message: '删除账号过程中发生错误'
+            message: '服务器内部错误',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 };

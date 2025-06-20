@@ -9,14 +9,29 @@
 - [支出记录 API](#支出记录-api)
 - [数据模型](#数据模型)
 - [错误码说明](#错误码说明)
+- [Supabase集成](#supabase集成)
+- [iOS客户端集成指南](#ios客户端集成指南)
+- [部署信息](#部署信息)
 
 ## 基本信息
 
-**基础 URL:** `http://localhost:3000`
+**生产环境 URL:** `https://your-app-name.vercel.app` (待部署)  
+**开发环境 URL:** `http://localhost:3000`
 
 **内容类型:** `application/json`
 
-**认证方式:** Bearer Token (JWT)
+**认证方式:** Bearer Token (Supabase JWT)
+
+**数据库:** Supabase PostgreSQL (已完成初始化)
+
+**认证系统:** Supabase Auth + 自定义用户管理
+
+**项目配置:**
+- **Supabase 项目 ID:** `nlrtjnvwgsaavtpfccxg`
+- **Supabase URL:** `https://nlrtjnvwgsaavtpfccxg.supabase.co`
+- **数据库状态:** ✅ 已初始化完成
+- **认证方式:** Supabase JWT Access Token
+- **API 端点数量:** 21个
 
 **响应格式:** 所有 API 返回统一的 JSON 格式：
 
@@ -124,13 +139,29 @@ curl -X POST http://localhost:3000/api/auth/login \
 
 ## 认证说明
 
-除了公共接口外，所有API都需要在请求头中包含JWT令牌：
+### 🔐 认证架构
+
+本项目使用 **Supabase Auth + 自定义用户管理** 的混合认证架构：
+
+- **认证服务**: Supabase Auth
+- **令牌类型**: Supabase JWT Access Token  
+- **令牌验证**: Supabase Auth API
+- **用户管理**: 自定义User模型 + Supabase数据库
+- **权限控制**: 自定义认证中间件
+
+### 🎫 令牌使用
+
+除了公共接口外，所有API都需要在请求头中包含Supabase访问令牌：
 
 ```
-Authorization: Bearer <token>
+Authorization: Bearer <supabase_access_token>
 ```
 
-令牌通过登录接口获取，有效期为7天。
+**令牌特性**：
+- 令牌通过登录接口获取
+- 由Supabase Auth服务生成和验证
+- 令牌包含用户身份信息
+- 支持令牌黑名单机制（用户删除时）
 
 ## 公共接口
 
@@ -211,7 +242,13 @@ Authorization: Bearer <token>
 
 **POST /api/auth/register**
 
-注册新用户账户
+使用Supabase Auth创建新用户账户
+
+**认证流程**：
+1. 使用Supabase Admin API创建用户
+2. 自动确认邮箱（跳过验证步骤）
+3. 创建用户profile记录
+4. 返回Supabase访问令牌
 
 **请求体:**
 ```json
@@ -229,7 +266,7 @@ Authorization: Bearer <token>
   "message": "注册成功",
   "data": {
     "user": {
-      "id": 1,
+      "id": "550e8400-e29b-41d4-a716-446655440000",
       "email": "user@example.com",
       "createdAt": "2024-01-15T10:30:00.000Z",
       "updatedAt": "2024-01-15T10:30:00.000Z"
@@ -251,7 +288,13 @@ Authorization: Bearer <token>
 
 **POST /api/auth/login**
 
-用户登录获取访问令牌
+使用Supabase Auth验证用户凭证并获取访问令牌
+
+**认证流程**：
+1. 使用Supabase Auth API验证邮箱密码
+2. 获取Supabase访问令牌
+3. 查询用户profile信息
+4. 返回用户信息和访问令牌
 
 **请求体:**
 ```json
@@ -268,7 +311,7 @@ Authorization: Bearer <token>
   "message": "登录成功",
   "data": {
     "user": {
-      "id": 1,
+      "id": "550e8400-e29b-41d4-a716-446655440000",
       "email": "user@example.com",
       "createdAt": "2024-01-15T10:30:00.000Z",
       "updatedAt": "2024-01-15T10:30:00.000Z"
@@ -292,9 +335,15 @@ Authorization: Bearer <token>
 
 获取已认证用户的详细信息
 
+**认证流程**：
+1. 验证Supabase访问令牌
+2. 从令牌中提取用户ID
+3. 查询用户profile信息
+4. 返回用户详细信息
+
 **请求头:**
 ```
-Authorization: Bearer <token>
+Authorization: Bearer <supabase_access_token>
 ```
 
 **成功响应 (200):**
@@ -303,7 +352,7 @@ Authorization: Bearer <token>
   "success": true,
   "data": {
     "user": {
-      "id": 1,
+      "id": "550e8400-e29b-41d4-a716-446655440000",
       "email": "user@example.com",
       "createdAt": "2024-01-15T10:30:00.000Z",
       "updatedAt": "2024-01-15T10:30:00.000Z"
@@ -318,9 +367,16 @@ Authorization: Bearer <token>
 
 软删除用户账号，账号删除后数据保留但无法访问
 
+**删除流程**：
+1. 验证Supabase访问令牌
+2. 验证确认文本
+3. 在profiles表中标记为已删除
+4. 使用Supabase Admin API禁用用户
+5. 将令牌加入黑名单
+
 **请求头:**
 ```
-Authorization: Bearer <token>
+Authorization: Bearer <supabase_access_token>
 ```
 
 **请求体:**
@@ -333,8 +389,9 @@ Authorization: Bearer <token>
 > 注意：
 > - 确认文本必须包含"我确认"三个字
 > - 删除后账号无法恢复
-> - 所有相关JWT token将立即失效
+> - 所有相关访问令牌将立即失效
 > - 用户数据会被保留但标记为已删除
+> - 使用Supabase Admin API禁用用户认证
 
 **成功响应 (200):**
 ```json
@@ -1369,3 +1426,422 @@ curl -X GET http://localhost:3000/api/expense/stats \
 **文档版本:** v1.0  
 **最后更新:** 2024-01-15  
 **服务版本:** 基于内存存储的MVP版本 
+
+## Supabase集成
+
+### 概述
+
+本应用已经集成了Supabase作为后端服务，提供以下功能：
+
+- 用户认证与授权
+- 数据存储与查询
+- 实时数据更新
+- 行级安全策略(RLS)
+
+### 认证流程变更
+
+认证流程已从自定义JWT认证迁移到Supabase认证系统。主要变更如下：
+
+1. **用户注册**：使用Supabase Auth API创建用户
+2. **用户登录**：使用Supabase Auth API进行身份验证
+3. **令牌验证**：使用Supabase Auth API验证令牌
+4. **用户删除**：使用Supabase Admin API禁用用户，并标记为已删除
+
+### 数据库表结构
+
+Supabase数据库包含以下主要表：
+
+#### profiles表
+```sql
+create table if not exists profiles (
+  id uuid references auth.users primary key,
+  email text not null,
+  is_deleted boolean default false,
+  deleted_at timestamp with time zone,
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now()
+);
+```
+
+#### expenses表
+```sql
+create table if not exists expenses (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references auth.users not null,
+  amount decimal not null check (amount > 0),
+  category text not null,
+  description text not null check (char_length(description) <= 200),
+  date timestamp with time zone default now(),
+  location text check (char_length(location) <= 100),
+  payment_method text default 'cash',
+  is_recurring boolean default false,
+  tags text[] default '{}',
+  notes text default '' check (char_length(notes) <= 500),
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now()
+);
+```
+
+#### budgets表
+```sql
+create table if not exists budgets (
+  id uuid default uuid_generate_v4() primary key,
+  user_id uuid references auth.users not null,
+  amount decimal not null check (amount > 0),
+  year integer not null,
+  month integer not null check (month between 1 and 12),
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now(),
+  unique(user_id, year, month)
+);
+```
+
+### iOS客户端集成
+
+iOS客户端需要使用Supabase Swift SDK进行集成。主要步骤如下：
+
+1. 安装Supabase Swift SDK：
+```swift
+// 使用Swift Package Manager
+.package(url: "https://github.com/supabase-community/supabase-swift", from: "0.3.0")
+```
+
+2. 初始化Supabase客户端：
+```swift
+import Foundation
+import Supabase
+
+class SupabaseManager {
+    static let shared = SupabaseManager()
+    
+    let client: SupabaseClient
+    
+    private init() {
+        // 从Info.plist加载配置
+        guard let supabaseUrl = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_URL") as? String,
+              let supabaseAnonKey = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String,
+              let url = URL(string: supabaseUrl) else {
+            fatalError("无法加载Supabase配置")
+        }
+        
+        client = SupabaseClient(supabaseURL: url, supabaseKey: supabaseAnonKey)
+    }
+}
+```
+
+3. 配置Info.plist：
+```xml
+<key>SUPABASE_URL</key>
+<string>https://nlrtjnvwgsaavtpfccxg.supabase.co</string>
+<key>SUPABASE_ANON_KEY</key>
+<string>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5scnRqbnZ3Z3NhYXZ0cGZjY3hnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAwNzU3MDgsImV4cCI6MjA2NTY1MTcwOH0.5r2tzDOV1T1Lkz_Mtujq35VBBfo77SCh6H__rUSHQCo</string>
+```
+
+4. 用户认证示例：
+```swift
+// 用户注册
+func signUp(email: String, password: String) async throws -> User {
+    let authResponse = try await SupabaseManager.shared.client.auth.signUp(
+        email: email,
+        password: password
+    )
+    
+    guard let user = authResponse.user else {
+        throw AuthError.signUpFailed
+    }
+    
+    return User(
+        id: user.id,
+        email: user.email ?? "",
+        createdAt: user.createdAt
+    )
+}
+
+// 用户登录
+func signIn(email: String, password: String) async throws -> User {
+    let authResponse = try await SupabaseManager.shared.client.auth.signIn(
+        email: email,
+        password: password
+    )
+    
+    guard let user = authResponse.user else {
+        throw AuthError.signInFailed
+    }
+    
+    return User(
+        id: user.id,
+        email: user.email ?? "",
+        createdAt: user.createdAt
+    )
+}
+```
+
+5. 数据操作示例：
+```swift
+// 创建支出记录
+func createExpense(_ expense: ExpenseCreate) async throws -> Expense {
+    let data: [String: Any] = [
+        "amount": expense.amount,
+        "category": expense.category,
+        "description": expense.description,
+        "date": expense.date.iso8601String(),
+        "location": expense.location,
+        "payment_method": expense.paymentMethod,
+        "is_recurring": expense.isRecurring,
+        "tags": expense.tags,
+        "notes": expense.notes
+    ]
+    
+    let response = try await SupabaseManager.shared.client
+        .from("expenses")
+        .insert(values: data)
+        .execute()
+    
+    guard let json = response.data as? [[String: Any]],
+          let expenseData = json.first else {
+        throw ExpenseError.creationFailed
+    }
+    
+    return try JSONDecoder().decode(Expense.self, from: JSONSerialization.data(withJSONObject: expenseData))
+}
+```
+
+### 安全注意事项
+
+1. 永远不要在客户端代码中硬编码service_role密钥
+2. 确保所有表都启用了行级安全策略(RLS)
+3. 使用适当的权限策略限制用户只能访问自己的数据
+4. 在后端API中验证所有用户输入 
+
+## iOS客户端集成指南
+
+### 概述
+
+iOS客户端需要使用Supabase Swift SDK进行集成。主要步骤如下：
+
+1. 安装Supabase Swift SDK：
+```swift
+// 使用Swift Package Manager
+.package(url: "https://github.com/supabase-community/supabase-swift", from: "0.3.0")
+```
+
+2. 初始化Supabase客户端：
+```swift
+import Foundation
+import Supabase
+
+class SupabaseManager {
+    static let shared = SupabaseManager()
+    
+    let client: SupabaseClient
+    
+    private init() {
+        // 从Info.plist加载配置
+        guard let supabaseUrl = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_URL") as? String,
+              let supabaseAnonKey = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String,
+              let url = URL(string: supabaseUrl) else {
+            fatalError("无法加载Supabase配置")
+        }
+        
+        client = SupabaseClient(supabaseURL: url, supabaseKey: supabaseAnonKey)
+    }
+}
+```
+
+3. 配置Info.plist：
+```xml
+<key>SUPABASE_URL</key>
+<string>https://nlrtjnvwgsaavtpfccxg.supabase.co</string>
+<key>SUPABASE_ANON_KEY</key>
+<string>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5scnRqbnZ3Z3NhYXZ0cGZjY3hnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAwNzU3MDgsImV4cCI6MjA2NTY1MTcwOH0.5r2tzDOV1T1Lkz_Mtujq35VBBfo77SCh6H__rUSHQCo</string>
+```
+
+4. 用户认证示例：
+```swift
+// 用户注册
+func signUp(email: String, password: String) async throws -> User {
+    let authResponse = try await SupabaseManager.shared.client.auth.signUp(
+        email: email,
+        password: password
+    )
+    
+    guard let user = authResponse.user else {
+        throw AuthError.signUpFailed
+    }
+    
+    return User(
+        id: user.id,
+        email: user.email ?? "",
+        createdAt: user.createdAt
+    )
+}
+
+// 用户登录
+func signIn(email: String, password: String) async throws -> User {
+    let authResponse = try await SupabaseManager.shared.client.auth.signIn(
+        email: email,
+        password: password
+    )
+    
+    guard let user = authResponse.user else {
+        throw AuthError.signInFailed
+    }
+    
+    return User(
+        id: user.id,
+        email: user.email ?? "",
+        createdAt: user.createdAt
+    )
+}
+```
+
+5. 数据操作示例：
+```swift
+// 创建支出记录
+func createExpense(_ expense: ExpenseCreate) async throws -> Expense {
+    let data: [String: Any] = [
+        "amount": expense.amount,
+        "category": expense.category,
+        "description": expense.description,
+        "date": expense.date.iso8601String(),
+        "location": expense.location,
+        "payment_method": expense.paymentMethod,
+        "is_recurring": expense.isRecurring,
+        "tags": expense.tags,
+        "notes": expense.notes
+    ]
+    
+    let response = try await SupabaseManager.shared.client
+        .from("expenses")
+        .insert(values: data)
+        .execute()
+    
+    guard let json = response.data as? [[String: Any]],
+          let expenseData = json.first else {
+        throw ExpenseError.creationFailed
+    }
+    
+    return try JSONDecoder().decode(Expense.self, from: JSONSerialization.data(withJSONObject: expenseData))
+}
+```
+
+### 安全注意事项
+
+1. 永远不要在客户端代码中硬编码service_role密钥
+2. 确保所有表都启用了行级安全策略(RLS)
+3. 使用适当的权限策略限制用户只能访问自己的数据
+4. 在后端API中验证所有用户输入 
+
+## 部署信息
+
+### 推荐部署方案
+
+本应用推荐使用 **Vercel** 进行部署，因为：
+- ✅ 免费额度足够使用
+- ✅ 支持 Node.js 应用
+- ✅ 自动 HTTPS 和 CDN
+- ✅ 与 GitHub 集成，自动部署
+- ✅ 环境变量管理
+- ✅ 无需容器化
+
+### Vercel 部署步骤
+
+1. **准备部署文件**：
+   ```json
+   // vercel.json
+   {
+     "version": 2,
+     "builds": [
+       {
+         "src": "server.js",
+         "use": "@vercel/node"
+       }
+     ],
+     "routes": [
+       {
+         "src": "/(.*)",
+         "dest": "/server.js"
+       }
+     ]
+   }
+   ```
+
+2. **环境变量配置**：
+   在 Vercel Dashboard 中配置以下环境变量：
+   ```
+   NODE_ENV=production
+   JWT_SECRET=your_production_jwt_secret
+   SUPABASE_URL=https://nlrtjnvwgsaavtpfccxg.supabase.co
+   SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+   SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+   ```
+
+3. **部署命令**：
+   ```bash
+   # 安装 Vercel CLI
+   npm install -g vercel
+   
+   # 登录 Vercel
+   vercel login
+   
+   # 部署
+   vercel --prod
+   ```
+
+### 替代部署方案
+
+#### 1. Railway
+- 简单的 Node.js 部署
+- 免费额度：每月 $5 信用额度
+- 自动从 GitHub 部署
+
+#### 2. Render
+- 免费的静态网站托管
+- 支持 Node.js 应用
+- 自动 SSL 证书
+
+#### 3. Heroku
+- 成熟的 PaaS 平台
+- 免费额度有限
+- 需要信用卡验证
+
+### 不推荐的部署方案
+
+❌ **阿里云 K8s 集群**：
+- 成本较高（至少 ¥200-500/月）
+- 配置复杂，需要容器化
+- 对于简单的 Node.js API 过度设计
+- 需要额外的运维工作
+
+❌ **自建服务器**：
+- 需要处理 SSL 证书
+- 需要配置反向代理
+- 需要处理安全更新
+- 运维成本高
+
+### 生产环境检查清单
+
+部署前请确认：
+
+- [ ] 环境变量已正确配置
+- [ ] Supabase 数据库已初始化
+- [ ] API 端点测试通过
+- [ ] 错误处理完善
+- [ ] 日志记录配置
+- [ ] 安全策略启用
+- [ ] 性能优化完成
+
+### 监控和维护
+
+部署后建议：
+1. 设置 Vercel 的监控告警
+2. 定期检查 Supabase 使用量
+3. 监控 API 响应时间
+4. 定期备份数据库
+5. 更新依赖包安全补丁
+
+---
+**文档版本:** v2.0  
+**最后更新:** 2024-06-17  
+**服务版本:** 基于 Supabase 的生产就绪版本  
+**部署状态:** 准备部署到 Vercel 

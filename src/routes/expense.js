@@ -29,6 +29,8 @@ router.get('/export', exportExpenses);
 // 获取支出趋势分析
 router.get('/trends', getExpenseTrends);
 
+
+
 // 支出记录CRUD
 router.post('/', createExpense);
 router.get('/', getExpenses);

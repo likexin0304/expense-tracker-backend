@@ -4,7 +4,7 @@
  */
 
 const Budget = require('../models/Budget');
-const Expense = require('../models/Expense');
+const { Expense } = require('../models/Expense');
 
 /**
  * 设置或更新月度预算

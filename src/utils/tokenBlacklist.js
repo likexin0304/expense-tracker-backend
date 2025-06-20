@@ -13,7 +13,7 @@ class TokenBlacklist {
     /**
      * 将token添加到黑名单
      * @param {string} token - JWT token
-     * @param {number} userId - 用户ID（可选）
+     * @param {string} userId - 用户ID（可选）
      */
     static addToken(token, userId = null) {
         blacklistedTokens.add(token);
@@ -30,7 +30,7 @@ class TokenBlacklist {
 
     /**
      * 将用户的所有token添加到黑名单
-     * @param {number} userId - 用户ID
+     * @param {string} userId - 用户ID
      */
     static blacklistUserTokens(userId) {
         const tokens = userTokens.get(userId);
@@ -40,6 +40,21 @@ class TokenBlacklist {
             });
             console.log(`🚫 用户 ${userId} 的所有token已加入黑名单，共 ${tokens.size} 个`);
         }
+    }
+    
+    /**
+     * 使用户的所有token失效，并确保当前token也被加入黑名单
+     * @param {string} userId - 用户ID
+     * @param {string} currentToken - 当前使用的token
+     */
+    static invalidateAllUserTokens(userId, currentToken) {
+        // 先加入当前token
+        this.addToken(currentToken, userId);
+        
+        // 再加入所有其他token
+        this.blacklistUserTokens(userId);
+        
+        console.log(`🔒 用户 ${userId} 的所有访问令牌已失效`);
     }
 
     /**
@@ -53,7 +68,7 @@ class TokenBlacklist {
 
     /**
      * 记录用户token（用于后续批量失效）
-     * @param {number} userId - 用户ID
+     * @param {string} userId - 用户ID
      * @param {string} token - JWT token
      */
     static recordUserToken(userId, token) {
