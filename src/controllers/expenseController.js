@@ -133,7 +133,23 @@ exports.getExpenses = async (req, res) => {
 exports.getExpenseById = async (req, res) => {
   try {
     const { id } = req.params;
-    console.log('📄 获取支出详情:', { id, userId: req.userId });
+    console.log('🔍 原始请求信息:', {
+      method: req.method,
+      url: req.url,
+      originalUrl: req.originalUrl,
+      path: req.path,
+      params: req.params,
+      headers: Object.keys(req.headers)
+    });
+    
+    console.log('📄 获取支出详情:', {
+      id,
+      idLength: id.length,
+      idType: typeof id,
+      userId: req.userId,
+      rawParams: req.params,
+      originalUrl: req.originalUrl
+    });
 
     const expense = await Expense.findById(id);
 
@@ -218,7 +234,12 @@ exports.updateExpense = async (req, res) => {
 exports.deleteExpense = async (req, res) => {
     try {
     const { id } = req.params;
-    console.log('🗑️ 删除支出记录:', { id, userId: req.userId });
+    console.log('🗑️ 删除支出记录:', {
+      id,
+      userId: req.userId,
+      rawParams: req.params,
+      originalUrl: req.originalUrl
+    });
 
     // 先检查记录是否存在且属于当前用户
     const expense = await Expense.findById(id);

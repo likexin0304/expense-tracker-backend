@@ -161,6 +161,12 @@ class Expense {
      */
     static async findById(expenseId) {
         try {
+            console.log('🔍 Expense.findById 调用:', {
+                expenseId,
+                type: typeof expenseId,
+                length: expenseId.length
+            });
+            
             const { data, error } = await supabaseAdmin
                 .from('expenses')
                 .select('*')
