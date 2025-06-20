@@ -43,7 +43,56 @@
 }
 ```
 
-## ⚠️ 重要：请求体格式要求
+## ⚠️ 重要：URL格式和请求体要求
+
+### 🔗 URL格式规范
+
+**所有带有ID参数的API端点必须使用路径参数而不是查询参数：**
+
+#### ✅ 正确的URL格式
+```
+GET /api/expense/8dbf136d-84d3-4b72-84bf-d7eb78c2dca0
+PUT /api/expense/8dbf136d-84d3-4b72-84bf-d7eb78c2dca0
+DELETE /api/expense/8dbf136d-84d3-4b72-84bf-d7eb78c2dca0
+```
+
+#### ❌ 错误的URL格式
+```
+GET /api/expense?id=8dbf136d-84d3-4b72-84bf-d7eb78c2dca0
+PUT /api/expense?id=8dbf136d-84d3-4b72-84bf-d7eb78c2dca0
+DELETE /api/expense?id=8dbf136d-84d3-4b72-84bf-d7eb78c2dca0
+```
+
+#### 📱 iOS客户端URL构建示例
+```swift
+// ✅ 正确的URL构建
+let baseURL = "https://your-api-domain.com"
+let expenseId = "8dbf136d-84d3-4b72-84bf-d7eb78c2dca0"
+let url = "\(baseURL)/api/expense/\(expenseId)"  // 使用路径参数
+
+// ❌ 错误的URL构建
+let url = "\(baseURL)/api/expense?id=\(expenseId)"  // 使用查询参数
+```
+
+#### 🔧 URL格式错误响应
+如果使用了错误的URL格式，服务器会返回详细的错误信息：
+```json
+{
+  "success": false,
+  "message": "URL格式错误",
+  "error": {
+    "received": "/api/expense?id=8dbf136d-84d3-4b72-84bf-d7eb78c2dca0",
+    "correct": "/api/expense/8dbf136d-84d3-4b72-84bf-d7eb78c2dca0",
+    "method": "DELETE",
+    "description": "DELETE请求应使用路径参数而不是查询参数"
+  },
+  "help": {
+    "correctFormat": "DELETE /api/expense/8dbf136d-84d3-4b72-84bf-d7eb78c2dca0",
+    "incorrectFormat": "DELETE /api/expense?id=8dbf136d-84d3-4b72-84bf-d7eb78c2dca0",
+    "documentation": "/api/debug/routes"
+  }
+}
+```
 
 ### 📋 请求体格式规范
 
@@ -842,7 +891,13 @@ Authorization: Bearer <token>
 ```
 
 **路径参数:**
-- `id`: 支出记录ID
+- `id`: 支出记录ID（UUID格式）
+
+**⚠️ URL格式要求:**
+```
+✅ 正确: GET /api/expense/8dbf136d-84d3-4b72-84bf-d7eb78c2dca0
+❌ 错误: GET /api/expense?id=8dbf136d-84d3-4b72-84bf-d7eb78c2dca0
+```
 
 **成功响应 (200):**
 ```json
@@ -884,7 +939,13 @@ Authorization: Bearer <token>
 ```
 
 **路径参数:**
-- `id`: 支出记录ID
+- `id`: 支出记录ID（UUID格式）
+
+**⚠️ URL格式要求:**
+```
+✅ 正确: PUT /api/expense/8dbf136d-84d3-4b72-84bf-d7eb78c2dca0
+❌ 错误: PUT /api/expense?id=8dbf136d-84d3-4b72-84bf-d7eb78c2dca0
+```
 
 **请求体:**
 ```json
@@ -950,13 +1011,54 @@ Authorization: Bearer <token>
 ```
 
 **路径参数:**
-- `id`: 支出记录ID
+- `id`: 支出记录ID（UUID格式）
+
+**⚠️ 重要：URL格式要求**
+
+✅ **正确格式:**
+```
+DELETE /api/expense/8dbf136d-84d3-4b72-84bf-d7eb78c2dca0
+```
+
+❌ **错误格式:**
+```
+DELETE /api/expense?id=8dbf136d-84d3-4b72-84bf-d7eb78c2dca0
+```
+
+**iOS客户端示例:**
+```swift
+// ✅ 正确的URL构建
+let expenseId = "8dbf136d-84d3-4b72-84bf-d7eb78c2dca0"
+let url = "\(baseURL)/api/expense/\(expenseId)"  // 路径参数
+
+// ❌ 错误的URL构建  
+let url = "\(baseURL)/api/expense?id=\(expenseId)"  // 查询参数
+```
 
 **成功响应 (200):**
 ```json
 {
   "success": true,
   "message": "支出记录删除成功"
+}
+```
+
+**错误响应 (400) - URL格式错误:**
+```json
+{
+  "success": false,
+  "message": "URL格式错误",
+  "error": {
+    "received": "/api/expense?id=8dbf136d-84d3-4b72-84bf-d7eb78c2dca0",
+    "correct": "/api/expense/8dbf136d-84d3-4b72-84bf-d7eb78c2dca0",
+    "method": "DELETE",
+    "description": "DELETE请求应使用路径参数而不是查询参数"
+  },
+  "help": {
+    "correctFormat": "DELETE /api/expense/8dbf136d-84d3-4b72-84bf-d7eb78c2dca0",
+    "incorrectFormat": "DELETE /api/expense?id=8dbf136d-84d3-4b72-84bf-d7eb78c2dca0",
+    "documentation": "/api/debug/routes"
+  }
 }
 ```
 

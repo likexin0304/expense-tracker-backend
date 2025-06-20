@@ -17,6 +17,38 @@ const router = express.Router();
 // 所有支出路由都需要认证
 router.use(authMiddleware);
 
+// 兼容性路由 - 处理错误的查询参数格式
+router.all('/', (req, res, next) => {
+  const { id } = req.query;
+  
+  if (id && req.method !== 'GET' && req.method !== 'POST') {
+    console.log('🔄 检测到错误的URL格式，重定向到正确格式:', {
+      method: req.method,
+      originalUrl: req.originalUrl,
+      queryId: id,
+      correctUrl: `/api/expense/${id}`
+    });
+    
+    return res.status(400).json({
+      success: false,
+      message: `URL格式错误`,
+      error: {
+        received: req.originalUrl,
+        correct: `/api/expense/${id}`,
+        method: req.method,
+        description: `${req.method}请求应使用路径参数而不是查询参数`
+      },
+      help: {
+        correctFormat: `${req.method} /api/expense/${id}`,
+        incorrectFormat: `${req.method} /api/expense?id=${id}`,
+        documentation: "/api/debug/routes"
+      }
+    });
+  }
+  
+  next();
+});
+
 // 调试路由 - 测试ID处理
 router.get('/debug/:id', (req, res) => {
   const { id } = req.params;
