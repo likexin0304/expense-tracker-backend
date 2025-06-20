@@ -2222,3 +2222,39 @@ npx supabase db push
 - **前端需要修复**：不应该将500错误判断为成功
 - **UUID处理**：必须避免任何数字转换操作
 - **部署策略**：需要确保代码更改立即生效
+
+## 2025-06-20 13:15:00 - 🚀 强制部署修复: 清除Vercel缓存解决UUID截断问题
+
+### 🎯 问题确认
+- **Vercel日志显示**: `invalid input syntax for type uuid: "69"`
+- **本地代码状态**: 已正确移除所有`parseInt(id)`调用
+- **根本原因**: Vercel缓存导致旧版本代码仍在运行
+
+### 🔧 修复措施
+1. **版本强制更新**: `1.0.1` → `1.0.2`
+2. **添加强力缓存清除配置**:
+   - 更新`vercel.json`添加`no-cache`头部
+   - 添加`X-Cache-Version`标识
+   - 设置环境变量`FORCE_CACHE_CLEAR=true`
+3. **服务器标识更新**: 添加`DEPLOYMENT_TRIGGER`标识
+4. **额外修复**: 移除`budgetController.js`中的`parseInt(budgetId)`调用
+
+### 📝 文件更改
+- `package.json`: 版本号更新到1.0.2
+- `vercel.json`: 添加强力缓存清除配置
+- `server.js`: 更新版本注释和缓存清除标识
+- `src/controllers/budgetController.js`: 修复parseInt(budgetId)问题
+
+### 🚀 部署状态
+- ✅ 代码已提交: `f0adc6f` (强制部署) + `5b65824` (budgetController修复)
+- ✅ 已推送到GitHub: `main`分支
+- 🔄 Vercel自动重新部署中...
+
+### 🧪 验证计划
+部署完成后验证：
+1. 删除API返回200而非500
+2. UUID完整传递，无截断
+3. 数据库记录真正删除
+4. 前端删除后刷新不重现
+
+---
