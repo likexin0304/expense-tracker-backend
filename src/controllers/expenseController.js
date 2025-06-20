@@ -234,14 +234,29 @@ exports.updateExpense = async (req, res) => {
 exports.deleteExpense = async (req, res) => {
     try {
     const { id } = req.params;
-    console.log('🗑️ 删除支出记录:', {
+    
+    // 强制调试日志 - 确保使用最新代码 v1.0.5
+    console.log('🗑️ 删除支出记录 [v1.0.5-latest]:', {
       id,
+      idType: typeof id,
+      idLength: id ? id.length : 'undefined',
       userId: req.userId,
       rawParams: req.params,
-      originalUrl: req.originalUrl
+      originalUrl: req.originalUrl,
+      timestamp: new Date().toISOString()
     });
 
+    // 验证ID格式
+    if (!id || typeof id !== 'string' || id.length !== 36) {
+      console.error('❌ 无效的UUID格式:', { id, type: typeof id, length: id ? id.length : 'undefined' });
+      return res.status(400).json({
+        success: false,
+        message: '无效的支出记录ID格式'
+      });
+    }
+
     // 先检查记录是否存在且属于当前用户
+    console.log('🔍 调用 Expense.findById，传入ID:', { id, type: typeof id, length: id.length });
     const expense = await Expense.findById(id);
     
     if (!expense || !expense.belongsToUser(req.userId)) {
@@ -252,6 +267,7 @@ exports.deleteExpense = async (req, res) => {
     }
 
     // 删除记录
+    console.log('🗑️ 调用 Expense.deleteById，传入ID:', { id, type: typeof id, length: id.length });
     const deleted = await Expense.deleteById(id);
     
     if (!deleted) {
@@ -261,7 +277,7 @@ exports.deleteExpense = async (req, res) => {
       });
     }
 
-    console.log('✅ 支出记录删除成功');
+    console.log('✅ 支出记录删除成功 [v1.0.5-latest]');
 
     res.json({
       success: true,
@@ -269,7 +285,7 @@ exports.deleteExpense = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ 删除支出记录失败:', error);
+    console.error('❌ 删除支出记录失败 [v1.0.5-latest]:', error);
     res.status(500).json({
       success: false,
       message: '删除支出记录失败',

@@ -1,7 +1,7 @@
 {
   "name": "expense-tracker-backend",
-  "version": "1.0.5",
-  "description": "费用追踪应用后端API - 修复Vercel运行时配置",
+  "version": "1.0.6",
+  "description": "费用追踪应用后端API",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -12,22 +12,22 @@
     "expense",
     "tracker",
     "api",
-    "node",
-    "express",
-    "supabase"
+    "backend"
   ],
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
-    "@supabase/supabase-js": "^2.39.7",
-    "bcryptjs": "^2.4.3",
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.1",
     "express": "^4.18.2",
-    "jsonwebtoken": "^9.0.2"
+    "cors": "^2.8.5",
+    "helmet": "^7.0.0",
+    "morgan": "^1.10.0",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "dotenv": "^16.0.3"
   },
   "devDependencies": {
-    "nodemon": "^3.0.3"
+    "nodemon": "^2.0.22"
   },
   "engines": {
     "node": ">=18.0.0"
