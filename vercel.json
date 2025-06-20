@@ -11,35 +11,5 @@
       "src": "/(.*)",
       "dest": "/server.js"
     }
-  ],
-  "headers": [
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-cache, no-store, must-revalidate, max-age=0"
-        },
-        {
-          "key": "Pragma",
-          "value": "no-cache"
-        },
-        {
-          "key": "Expires",
-          "value": "0"
-        },
-        {
-          "key": "X-Cache-Version",
-          "value": "1.0.6-uuid-fix"
-        }
-      ]
-    }
-  ],
-  "env": {
-    "NODE_ENV": "production",
-    "FORCE_DEPLOY": "2025-06-20-16:15",
-    "FORCE_CACHE_CLEAR": "true",
-    "DEPLOYMENT_VERSION": "1.0.6",
-    "DEPLOY_TRIGGER": "uuid-fix-final"
-  }
+  ]
 } 
