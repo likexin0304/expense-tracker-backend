@@ -17,6 +17,28 @@ const router = express.Router();
 // 所有支出路由都需要认证
 router.use(authMiddleware);
 
+// 调试路由 - 测试ID处理
+router.get('/debug/:id', (req, res) => {
+  const { id } = req.params;
+  console.log('🔧 调试路由被调用:', {
+    id,
+    type: typeof id,
+    length: id.length,
+    originalUrl: req.originalUrl
+  });
+  
+  res.json({
+    success: true,
+    data: {
+      receivedId: id,
+      idType: typeof id,
+      idLength: id.length,
+      originalUrl: req.originalUrl,
+      timestamp: new Date().toISOString()
+    }
+  });
+});
+
 // 获取支出分类列表 (必须在 :id 路由之前)
 router.get('/categories', getCategories);
 
