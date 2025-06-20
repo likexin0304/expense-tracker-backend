@@ -1,7 +1,7 @@
 {
   "name": "expense-tracker-backend",
-  "version": "1.0.3",
-  "description": "费用追踪应用后端API - 强制缓存清除版本",
+  "version": "1.0.4",
+  "description": "费用追踪应用后端API - 修复Vercel路由配置",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

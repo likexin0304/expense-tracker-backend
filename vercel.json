@@ -1,15 +1,9 @@
 {
   "version": 2,
-  "builds": [
+  "rewrites": [
     {
-      "src": "server.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/server.js"
+      "source": "/(.*)",
+      "destination": "/server.js"
     }
   ],
   "headers": [
@@ -30,16 +24,21 @@
         },
         {
           "key": "X-Cache-Version",
-          "value": "1.0.2-force-clear"
+          "value": "1.0.3-fixed-routing"
         }
       ]
     }
   ],
+  "functions": {
+    "server.js": {
+      "runtime": "nodejs18.x"
+    }
+  },
   "env": {
     "NODE_ENV": "production",
-    "FORCE_DEPLOY": "2025-06-20-13:20",
+    "FORCE_DEPLOY": "2025-06-20-13:30",
     "FORCE_CACHE_CLEAR": "true",
-    "DEPLOYMENT_VERSION": "1.0.2",
-    "DEPLOY_TRIGGER": "manual-force-deploy"
+    "DEPLOYMENT_VERSION": "1.0.3",
+    "DEPLOY_TRIGGER": "routing-fix"
   }
 } 
