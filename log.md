@@ -399,6 +399,87 @@ npm run dev
 npm start
 ```
 
+## 2024-06-20（URL格式错误问题修复）
+
+### 🐛 问题发现
+用户反馈API报错：`"路由 /api/expense?id=8dbf136d-84d3-4b72-84bf-d7eb78c2dca0 不存在"`
+
+### 🔍 根本原因
+**iOS客户端使用了错误的URL格式**：
+- ❌ 错误格式：`DELETE /api/expense?id=8dbf136d-84d3-4b72-84bf-d7eb78c2dca0` (查询参数)
+- ✅ 正确格式：`DELETE /api/expense/8dbf136d-84d3-4b72-84bf-d7eb78c2dca0` (路径参数)
+
+### 🛠️ 修复措施
+
+#### 1. 添加兼容性检查路由
+在`src/routes/expense.js`中添加：
+```javascript
+// 兼容性路由 - 处理错误的查询参数格式
+router.all('/', (req, res, next) => {
+  const { id } = req.query;
+  
+  if (id && req.method !== 'GET' && req.method !== 'POST') {
+    return res.status(400).json({
+      success: false,
+      message: `URL格式错误`,
+      error: {
+        received: req.originalUrl,
+        correct: `/api/expense/${id}`,
+        method: req.method,
+        description: `${req.method}请求应使用路径参数而不是查询参数`
+      },
+      help: {
+        correctFormat: `${req.method} /api/expense/${id}`,
+        incorrectFormat: `${req.method} /api/expense?id=${id}`,
+        documentation: "/api/debug/routes"
+      }
+    });
+  }
+  
+  next();
+});
+```
+
+#### 2. 更新API文档
+在`docs/API.md`中添加：
+- **🔗 URL格式规范**章节
+- ✅ 正确的URL格式示例
+- ❌ 错误的URL格式示例  
+- 📱 iOS客户端URL构建示例
+- 🔧 URL格式错误响应示例
+
+#### 3. 强化错误提示
+为所有带ID参数的API端点添加：
+- 路径参数格式说明（UUID格式）
+- URL格式要求
+- iOS客户端示例代码
+
+### 📋 技术细节
+- **查询参数**: `/api/expense?id=xxx` - 用于GET请求的过滤条件
+- **路径参数**: `/api/expense/xxx` - 用于标识特定资源的ID
+- **RESTful规范**: 资源ID应该使用路径参数而不是查询参数
+
+### 🚀 版本更新
+- **版本号**：1.0.8 → 1.0.9
+- **提交信息**：修复URL格式错误，添加兼容性检查
+- **部署状态**：推送到GitHub，等待Vercel自动部署
+
+### ✅ 预期效果
+1. **错误的URL格式**会返回详细的错误提示和修复建议
+2. **API文档**明确说明正确的URL格式
+3. **iOS开发者**可以参考示例代码修复客户端问题
+
+### 📝 iOS客户端修复建议
+```swift
+// ✅ 正确的URL构建
+let baseURL = "https://your-api-domain.com"
+let expenseId = "8dbf136d-84d3-4b72-84bf-d7eb78c2dca0"
+let url = "\(baseURL)/api/expense/\(expenseId)"  // 使用路径参数
+
+// ❌ 错误的URL构建（需要修复）
+let url = "\(baseURL)/api/expense?id=\(expenseId)"  // 使用查询参数
+```
+
 ## 2023-xx-xx（更新日期）
 
 ### 添加的文件

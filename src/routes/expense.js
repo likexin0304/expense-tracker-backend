@@ -14,10 +14,7 @@ const authMiddleware = require('../middleware/auth');
 
 const router = express.Router();
 
-// 所有支出路由都需要认证
-router.use(authMiddleware);
-
-// 兼容性路由 - 处理错误的查询参数格式
+// 兼容性路由 - 处理错误的查询参数格式（在认证之前检查）
 router.all('/', (req, res, next) => {
   const { id } = req.query;
   
@@ -48,6 +45,9 @@ router.all('/', (req, res, next) => {
   
   next();
 });
+
+// 所有支出路由都需要认证（除了上面的兼容性检查）
+router.use(authMiddleware);
 
 // 调试路由 - 测试ID处理
 router.get('/debug/:id', (req, res) => {
