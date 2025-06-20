@@ -1,8 +1,8 @@
 /**
  * 费用追踪应用后端服务器
- * v1.0.6 - 强制更新Vercel部署
+ * v1.0.7 - 修复Vercel配置和UUID删除问题
+ * 修复: Vercel路由配置，使用builds+routes替代rewrites
  * 修复: UUID处理问题，移除所有parseInt(id)调用
- * 修复: Vercel部署配置，使用现代路由格式
  */
 
 const express = require('express');
@@ -22,7 +22,8 @@ console.log('🚀 正在启动服务器...');
 app.listen(PORT, () => {
     console.log('✅ 服务器配置完成');
     console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📝 Version: 1.0.6 - UUID修复版本`);
+    console.log(`📝 Version: 1.0.7 - Vercel配置修复版本`);
     console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`⚡ Force deployment: ${new Date().toISOString()}`);
+    console.log(`⚡ Force deployment: ${new Date().toISOString()}`);
+    console.log(`🔧 Vercel config: builds+routes (fixed)`);
 }); 

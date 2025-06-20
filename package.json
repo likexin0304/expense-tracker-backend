@@ -1,7 +1,7 @@
 {
   "name": "expense-tracker-backend",
-  "version": "1.0.6",
-  "description": "费用追踪应用后端API",
+  "version": "1.0.7",
+  "description": "费用追踪应用后端API - 修复Vercel配置",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

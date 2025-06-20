@@ -1,9 +1,15 @@
 {
   "version": 2,
-  "rewrites": [
+  "builds": [
     {
-      "source": "/(.*)",
-      "destination": "/server.js"
+      "src": "server.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/server.js"
     }
   ],
   "headers": [
@@ -24,16 +30,16 @@
         },
         {
           "key": "X-Cache-Version",
-          "value": "1.0.4-runtime-fix"
+          "value": "1.0.6-uuid-fix"
         }
       ]
     }
   ],
   "env": {
     "NODE_ENV": "production",
-    "FORCE_DEPLOY": "2025-06-20-13:35",
+    "FORCE_DEPLOY": "2025-06-20-16:15",
     "FORCE_CACHE_CLEAR": "true",
-    "DEPLOYMENT_VERSION": "1.0.4",
-    "DEPLOY_TRIGGER": "runtime-fix"
+    "DEPLOYMENT_VERSION": "1.0.6",
+    "DEPLOY_TRIGGER": "uuid-fix-final"
   }
 } 
