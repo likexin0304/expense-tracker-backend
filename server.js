@@ -1,6 +1,6 @@
 /**
  * 费用追踪应用后端服务器
- * v1.0.9 - 修复URL格式错误，添加兼容性检查
+ * v1.0.10 - 添加详细调试信息追踪UUID截断问题
  * 修复: 添加express-rate-limit依赖
  * 修复: Vercel路由配置，使用builds+routes替代rewrites
  * 修复: UUID处理问题，移除所有parseInt(id)调用
@@ -23,7 +23,7 @@ console.log('🚀 正在启动服务器...');
 app.listen(PORT, () => {
     console.log('✅ 服务器配置完成');
     console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📝 Version: 1.0.9 - 修复URL格式错误`);
+    console.log(`📝 Version: 1.0.10 - 添加UUID调试信息`);
     console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`⚡ Force deployment: ${new Date().toISOString()}`);
     console.log(`🔧 Vercel config: builds+routes (fixed)`);
