@@ -480,6 +480,116 @@ let url = "\(baseURL)/api/expense/\(expenseId)"  // 使用路径参数
 let url = "\(baseURL)/api/expense?id=\(expenseId)"  // 使用查询参数
 ```
 
+## 2024-06-20（UUID截断问题深度调试）
+
+### 🐛 新发现的问题
+在修复URL格式错误后，发现了一个更深层的问题：
+- **错误信息**: `invalid input syntax for type uuid: "4513089"`
+- **问题描述**: 完整UUID `4513089a-8823-466a-bbc2-411639a86f95` 被截断为 `"4513089"`
+- **错误位置**: `src/models/Expense.js:145:23` 的 `Expense.findById` 方法
+
+### 🔍 问题分析
+**前端状态 ✅**：
+- URL格式正确：`DELETE /api/expense/4513089a-8823-466a-bbc2-411639a86f95`
+- UUID完整传递到后端
+- 路由和控制器层正常接收
+
+**后端问题 ❌**：
+- 数据库查询时UUID被截断为前7个字符
+- 错误发生在Supabase查询层
+- 可能的原因：SQL参数绑定问题或字符串处理错误
+
+### 🛠️ 调试措施
+
+#### 1. 添加详细调试信息
+在 `src/models/Expense.js` 中添加：
+
+**findById方法增强**：
+```javascript
+static async findById(expenseId) {
+    try {
+        console.log('🔍 Expense.findById 调用开始:', {
+            expenseId,
+            type: typeof expenseId,
+            length: expenseId ? expenseId.length : 'undefined',
+            isString: typeof expenseId === 'string',
+            originalValue: expenseId
+        });
+        
+        // 验证UUID格式
+        if (!expenseId || typeof expenseId !== 'string') {
+            throw new Error(`无效的支出ID格式: ${expenseId}`);
+        }
+        
+        if (expenseId.length !== 36) {
+            throw new Error(`无效的UUID长度: 期望36个字符，实际${expenseId.length}个字符`);
+        }
+        
+        console.log('🔍 准备执行Supabase查询，UUID:', {
+            expenseId,
+            length: expenseId.length,
+            beforeQuery: true
+        });
+        
+        // Supabase查询...
+        
+        console.log('🔍 Supabase查询完成:', {
+            hasData: !!data,
+            hasError: !!error,
+            errorCode: error?.code,
+            errorMessage: error?.message,
+            expenseIdUsed: expenseId
+        });
+    }
+}
+```
+
+**deleteById方法增强**：
+```javascript
+static async deleteById(expenseId) {
+    console.log('🗑️ Expense.deleteById 调用开始:', {
+        expenseId,
+        type: typeof expenseId,
+        length: expenseId ? expenseId.length : 'undefined',
+        isString: typeof expenseId === 'string'
+    });
+    
+    // UUID格式验证
+    if (!expenseId || typeof expenseId !== 'string' || expenseId.length !== 36) {
+        throw new Error(`无效的支出ID格式: ${expenseId}`);
+    }
+    
+    // 详细的Supabase查询日志...
+}
+```
+
+#### 2. 错误捕获改进
+- 添加完整的错误堆栈跟踪
+- 记录Supabase查询前后的UUID状态
+- 验证UUID格式和长度
+
+#### 3. 版本更新
+- **版本号**: v1.0.9 → v1.0.10
+- **目标**: 通过详细日志定位UUID截断的确切位置
+- **部署**: 推送到GitHub等待Vercel自动部署
+
+### 🎯 预期结果
+通过新的调试信息，我们应该能够看到：
+1. **UUID在何时被截断**（控制器层 vs 模型层 vs Supabase层）
+2. **截断的确切位置**和原因
+3. **是否存在隐藏的字符串处理问题**
+
+### 📋 下一步计划
+1. **等待用户测试**新的调试版本
+2. **分析详细日志**确定UUID截断的根本原因
+3. **实施针对性修复**
+4. **验证修复效果**
+
+### 🚨 注意事项
+- 这是一个深层的数据库查询问题，不是简单的URL格式问题
+- 可能涉及Supabase客户端的UUID处理机制
+- 需要通过详细日志才能准确定位问题所在
+
 ## 2023-xx-xx（更新日期）
 
 ### 添加的文件
