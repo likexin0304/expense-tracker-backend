@@ -1,5 +1,95 @@
 # 更改日志
 
+## 2025-06-23（🚀 v1.0.11: 强制Vercel部署UUID调试版本）
+
+### 🚨 **Vercel部署问题再次出现**
+
+#### 问题现象
+用户删除支出时仍然报错，Vercel日志显示：
+- **错误**: `invalid input syntax for type uuid: "8"`
+- **完整UUID**: `8dbf136d-84d3-4b72-84bf-d7eb78c2dca0` (36字符)
+- **传给数据库**: `"8"` (只有1个字符)
+- **关键发现**: 没有看到v1.0.10版本添加的详细调试日志
+
+#### 根本原因分析
+1. **Vercel仍在使用旧代码**：
+   - 本地代码已包含完整的UUID调试信息（`Expense.findById`方法161-184行）
+   - Vercel日志中完全没有这些调试信息输出
+   - 说明Vercel没有部署最新的v1.0.10代码
+
+2. **UUID截断位置**：
+   - 控制器层正常接收：`8dbf136d-84d3-4b72-84bf-d7eb78c2dca0`
+   - 数据库层被截断：`"8"`
+   - 错误位置：`/var/task/src/models/Expense.js:145:23`
+
+#### 🔧 **强制部署修复措施**
+
+##### 1. 版本号强制更新
+**文件**: `package.json`
+```diff
+- "version": "1.0.10",
+- "description": "费用追踪应用后端API - 修复Vercel配置",
++ "version": "1.0.11",
++ "description": "费用追踪应用后端API - 强制Vercel部署 2025-06-23",
+```
+
+##### 2. 服务器文件时间戳更新
+**文件**: `server.js`
+```diff
+/**
+ * 费用追踪应用后端服务器
+- * v1.0.10 - 添加详细调试信息追踪UUID截断问题
++ * v1.0.11 - 强制Vercel部署UUID调试版本
++ * 部署时间: 2025-06-23T04:00:00Z
+ * 修复: 添加express-rate-limit依赖
+ * 修复: Vercel路由配置，使用builds+routes替代rewrites
+ * 修复: UUID处理问题，移除所有parseInt(id)调用
++ * 调试: 添加详细UUID追踪信息到Expense.findById
+ */
+```
+
+##### 3. 启动日志增强
+```diff
+- console.log(`📝 Version: 1.0.10 - 添加UUID调试信息`);
++ console.log(`📝 Version: 1.0.11 - 强制Vercel部署UUID调试版本`);
++ console.log(`🐛 Debug: UUID tracking enabled in Expense.findById`);
+```
+
+#### 🚀 **部署状态**
+- ✅ 代码已提交: `git commit -m "🚀 v1.0.11 - 强制Vercel部署UUID调试版本"`
+- ✅ 代码已推送: `git push origin main`
+- ❌ Vercel自动部署未生效（仍使用旧代码）
+- ✅ **Vercel CLI强制部署成功**: `npx vercel --prod --force`
+- 🆕 **新生产环境URL**: `https://expense-tracker-backend-fls5ul0ht-likexin0304s-projects.vercel.app`
+- ✅ 健康检查正常: `2025-06-23T04:53:34.070Z`
+- 🔍 准备验证UUID调试日志
+
+#### 🎯 **预期结果**
+1. **调试日志出现**：
+   - `🔍 Expense.findById 调用开始`
+   - `🔍 准备执行Supabase查询，UUID`
+   - `🔍 Supabase查询完成`
+
+2. **UUID完整性验证**：
+   - 36字符UUID不被截断
+   - 详细的UUID格式验证日志
+   - 错误位置精确定位
+
+3. **删除功能修复**：
+   - 支出记录成功删除
+   - 前端刷新后记录真正消失
+
+#### 📊 **技术分析**
+**问题类型**: Vercel部署缓存/同步问题
+**解决策略**: 
+- 多重强制更新标记（版本号+时间戳+描述）
+- 启动日志验证部署版本
+- 详细调试信息追踪UUID处理流程
+
+**备用方案**: 如果自动部署仍不生效，准备手动触发Vercel Dashboard重新部署
+
+---
+
 ## 2025-06-20（✅ v1.0.8: Vercel部署问题彻底解决！）
 
 ### 🎉 **重大突破：Vercel部署问题完全修复**

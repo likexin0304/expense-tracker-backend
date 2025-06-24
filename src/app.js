@@ -12,6 +12,7 @@ require('dotenv').config();
 const authRoutes = require('./routes/auth');
 const budgetRoutes = require('./routes/budget');
 const expenseRoutes = require('./routes/expense');
+const ocrRoutes = require('./routes/ocr');
 
 const app = express();
 
@@ -97,6 +98,7 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);      // 认证路由
 app.use('/api/budget', budgetRoutes);  // 预算路由
 app.use('/api/expense', expenseRoutes); // 支出路由（注意路径是/expense单数形式）
+app.use('/api/ocr', ocrRoutes);        // OCR自动识别路由
 
 // API文档路由
 app.get('/api/debug/routes', (req, res) => {
@@ -141,7 +143,16 @@ app.get('/api/debug/routes', (req, res) => {
             'GET /api/expense/trends',
             'GET /api/expense/:id',
             'PUT /api/expense/:id',
-            'DELETE /api/expense/:id'
+            'DELETE /api/expense/:id',
+            // OCR自动识别 (需要认证)
+            'POST /api/ocr/parse',
+            'POST /api/ocr/confirm/:recordId',
+            'GET /api/ocr/records',
+            'GET /api/ocr/records/:recordId',
+            'DELETE /api/ocr/records/:recordId',
+            'GET /api/ocr/statistics',
+            'GET /api/ocr/merchants',
+            'POST /api/ocr/merchants/match'
         ],
         errorHandling: {
             jsonParseErrors: '会提供详细的格式错误提示和修复建议',

@@ -7,6 +7,7 @@
 - [认证相关 API](#认证相关-api)
 - [预算管理 API](#预算管理-api)
 - [支出记录 API](#支出记录-api)
+- [OCR自动识别 API](#ocr自动识别-api)
 - [数据模型](#数据模型)
 - [错误码说明](#错误码说明)
 - [Supabase集成](#supabase集成)
@@ -31,7 +32,7 @@
 - **Supabase URL:** `https://nlrtjnvwgsaavtpfccxg.supabase.co`
 - **数据库状态:** ✅ 已初始化完成
 - **认证方式:** Supabase JWT Access Token
-- **API 端点数量:** 21个
+- **API 端点数量:** 29个 (包括8个OCR自动识别端点)
 
 **响应格式:** 所有 API 返回统一的 JSON 格式：
 
@@ -1332,6 +1333,429 @@ GET /api/expense/stats?startDate=2024-01-01&endDate=2024-01-31&period=month
     "periodStats": []
   }
 }
+```
+
+## OCR自动识别 API
+
+### 🔍 功能概述
+
+OCR自动识别功能可以自动解析账单文本，提取商户、金额、日期等信息，并智能匹配预置商户数据库，最终生成支出记录。
+
+**主要特性:**
+- 🤖 智能文本解析：自动识别金额、日期、商户名称
+- 🏪 商户智能匹配：基于150+预置商户数据库进行智能匹配
+- 📊 置信度评分：每个解析结果都有置信度评分
+- 🔄 结果确认流程：用户可以审核并修正解析结果
+- 📈 统计分析：提供OCR识别成功率和使用统计
+
+**工作流程:**
+1. 提交OCR文本 → 2. 系统解析 → 3. 用户确认 → 4. 创建支出记录
+
+### 1. 解析OCR文本
+
+**POST** `/api/ocr/parse`
+
+解析OCR识别的文本，提取商户、金额、日期等信息。
+
+#### 请求参数
+```json
+{
+  "text": "麦当劳 2024-01-15 消费金额：¥25.80 支付方式：支付宝"
+}
+```
+
+#### 成功响应 (200)
+```json
+{
+  "success": true,
+  "message": "OCR文本解析完成",
+  "data": {
+    "record": {
+      "id": "uuid",
+      "originalText": "麦当劳 2024-01-15 消费金额：¥25.80 支付方式：支付宝",
+      "parsedData": {
+        "merchant": {
+          "name": "麦当劳",
+          "category": "餐饮",
+          "confidence": 1.0,
+          "matchType": "exact_name"
+        },
+        "amount": {
+          "value": 25.80,
+          "confidence": 0.95,
+          "originalText": "¥25.80"
+        },
+        "date": {
+          "value": "2024-01-15",
+          "confidence": 0.9,
+          "originalText": "2024-01-15"
+        },
+        "paymentMethod": {
+          "value": "支付宝",
+          "confidence": 0.8,
+          "originalText": "支付宝"
+        },
+        "category": {
+          "value": "餐饮",
+          "confidence": 0.9,
+          "source": "merchant_match"
+        }
+      },
+      "confidenceScore": 0.93,
+      "status": "success",
+      "suggestions": {
+        "autoCreate": true,
+        "needsReview": false,
+        "confidence": "high"
+      },
+      "createdAt": "2024-01-15T10:30:00Z"
+    }
+  }
+}
+```
+
+#### 错误响应 (400)
+```json
+{
+  "success": false,
+  "message": "OCR文本解析失败",
+  "error": {
+    "type": "PARSE_ERROR",
+    "details": "无法从文本中提取有效信息",
+    "suggestions": [
+      "请确保文本包含金额信息",
+      "检查文本格式是否正确",
+      "可以尝试重新拍照或调整图片质量"
+    ]
+  }
+}
+```
+
+### 2. 确认并创建支出记录
+
+**POST** `/api/ocr/confirm/:recordId`
+
+确认OCR解析结果并创建支出记录。
+
+#### 请求参数
+```json
+{
+  "confirmed": true,
+  "corrections": {
+    "amount": 26.00,
+    "category": "餐饮",
+    "description": "麦当劳午餐"
+  }
+}
+```
+
+#### 成功响应 (201)
+```json
+{
+  "success": true,
+  "message": "支出记录创建成功",
+  "data": {
+    "expense": {
+      "id": "expense-uuid",
+      "amount": 26.00,
+      "category": "餐饮",
+      "description": "麦当劳午餐",
+      "date": "2024-01-15",
+      "paymentMethod": "支付宝",
+      "createdAt": "2024-01-15T10:35:00Z"
+    },
+    "ocrRecord": {
+      "id": "ocr-uuid",
+      "status": "confirmed",
+      "expenseId": "expense-uuid"
+    }
+  }
+}
+```
+
+### 3. 获取OCR记录列表
+
+**GET** `/api/ocr/records`
+
+获取用户的OCR记录列表，支持分页和筛选。
+
+#### 查询参数
+- `page` (可选): 页码，默认1
+- `limit` (可选): 每页数量，默认20
+- `status` (可选): 状态筛选 (processing/success/failed/confirmed)
+- `startDate` (可选): 开始日期
+- `endDate` (可选): 结束日期
+
+#### 成功响应 (200)
+```json
+{
+  "success": true,
+  "message": "OCR记录列表获取成功",
+  "data": {
+    "records": [
+      {
+        "id": "uuid",
+        "originalText": "麦当劳 2024-01-15...",
+        "parsedData": { /* 解析结果 */ },
+        "confidenceScore": 0.93,
+        "status": "confirmed",
+        "expenseId": "expense-uuid",
+        "createdAt": "2024-01-15T10:30:00Z"
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 5,
+      "totalRecords": 98,
+      "hasNextPage": true,
+      "hasPreviousPage": false
+    }
+  }
+}
+```
+
+### 4. 获取单个OCR记录详情
+
+**GET** `/api/ocr/records/:recordId`
+
+获取指定OCR记录的详细信息。
+
+#### 成功响应 (200)
+```json
+{
+  "success": true,
+  "message": "OCR记录详情获取成功",
+  "data": {
+    "record": {
+      "id": "uuid",
+      "originalText": "完整的原始文本",
+      "parsedData": {
+        "merchant": { /* 商户信息 */ },
+        "amount": { /* 金额信息 */ },
+        "date": { /* 日期信息 */ },
+        "paymentMethod": { /* 支付方式 */ },
+        "category": { /* 分类信息 */ }
+      },
+      "confidenceScore": 0.93,
+      "status": "success",
+      "expenseId": null,
+      "errorMessage": null,
+      "createdAt": "2024-01-15T10:30:00Z",
+      "updatedAt": "2024-01-15T10:30:00Z"
+    }
+  }
+}
+```
+
+### 5. 删除OCR记录
+
+**DELETE** `/api/ocr/records/:recordId`
+
+删除指定的OCR记录。
+
+#### 成功响应 (200)
+```json
+{
+  "success": true,
+  "message": "OCR记录删除成功"
+}
+```
+
+### 6. 获取OCR统计信息
+
+**GET** `/api/ocr/statistics`
+
+获取用户的OCR使用统计信息。
+
+#### 成功响应 (200)
+```json
+{
+  "success": true,
+  "message": "OCR统计信息获取成功",
+  "data": {
+    "totalRecords": 156,
+    "successfulParsing": 142,
+    "confirmedRecords": 128,
+    "averageConfidence": 0.87,
+    "successRate": 0.91,
+    "categoryDistribution": {
+      "餐饮": 45,
+      "购物": 32,
+      "交通": 28,
+      "生活": 23
+    },
+    "monthlyStats": [
+      {
+        "month": "2024-01",
+        "totalRecords": 25,
+        "successfulParsing": 23,
+        "confirmedRecords": 21
+      }
+    ],
+    "topMerchants": [
+      {
+        "merchantName": "麦当劳",
+        "count": 8,
+        "totalAmount": 206.40
+      }
+    ]
+  }
+}
+```
+
+### 7. 获取商户列表
+
+**GET** `/api/ocr/merchants`
+
+获取预置商户数据库，用于OCR结果校正。
+
+#### 查询参数
+- `category` (可选): 分类筛选
+- `search` (可选): 搜索关键词
+- `page` (可选): 页码，默认1
+- `limit` (可选): 每页数量，默认50
+
+#### 成功响应 (200)
+```json
+{
+  "success": true,
+  "message": "商户列表获取成功",
+  "data": {
+    "merchants": [
+      {
+        "id": "uuid",
+        "name": "麦当劳",
+        "category": "餐饮",
+        "keywords": ["麦当劳", "McDonald", "M记", "金拱门"],
+        "confidenceScore": 1.0,
+        "isActive": true
+      }
+    ],
+    "categories": ["餐饮", "购物", "交通", "生活", "娱乐", "医疗", "教育"],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 3,
+      "totalRecords": 103
+    }
+  }
+}
+```
+
+### 8. 智能匹配商户
+
+**POST** `/api/ocr/merchants/match`
+
+根据文本智能匹配商户。
+
+#### 请求参数
+```json
+{
+  "text": "麦当劳",
+  "minConfidence": 0.3,
+  "maxResults": 10
+}
+```
+
+#### 成功响应 (200)
+```json
+{
+  "success": true,
+  "message": "商户匹配完成",
+  "data": {
+    "matches": [
+      {
+        "merchant": {
+          "id": "uuid",
+          "name": "麦当劳",
+          "category": "餐饮",
+          "keywords": ["麦当劳", "McDonald", "M记", "金拱门"]
+        },
+        "confidence": 1.0,
+        "matchType": "exact_name"
+      }
+    ],
+    "totalMatches": 1,
+    "searchText": "麦当劳"
+  }
+}
+```
+
+### 📊 OCR数据模型
+
+#### OCRRecord (OCR记录)
+```typescript
+{
+  id: string,
+  userId: string,
+  originalText: string,
+  parsedData: {
+    merchant?: {
+      name: string,
+      category: string,
+      confidence: number,
+      matchType: string
+    },
+    amount?: {
+      value: number,
+      confidence: number,
+      originalText: string
+    },
+    date?: {
+      value: string,
+      confidence: number,
+      originalText: string
+    },
+    paymentMethod?: {
+      value: string,
+      confidence: number,
+      originalText: string
+    },
+    category?: {
+      value: string,
+      confidence: number,
+      source: string
+    }
+  },
+  confidenceScore: number,
+  status: 'processing' | 'success' | 'failed' | 'confirmed',
+  errorMessage?: string,
+  expenseId?: string,
+  createdAt: Date,
+  updatedAt: Date
+}
+```
+
+#### Merchant (商户)
+```typescript
+{
+  id: string,
+  name: string,
+  category: string,
+  keywords: string[],
+  confidenceScore: number,
+  isActive: boolean,
+  createdAt: Date,
+  updatedAt: Date
+}
+```
+
+### 🎯 使用建议
+
+#### 1. 最佳实践
+- **文本预处理**: 在发送OCR文本前，可以进行基本的清理（去除多余空格等）
+- **结果验证**: 建议用户在确认前检查解析结果，特别是金额和日期
+- **错误处理**: 对于置信度较低的结果，建议用户手动校正
+
+#### 2. 性能优化
+- **批量处理**: 对于多个账单，可以逐个处理而不是批量提交
+- **缓存机制**: 商户匹配结果会被缓存以提高性能
+- **异步处理**: 复杂的OCR解析可能需要一些时间
+
+#### 3. 错误处理
+- **解析失败**: 当OCR文本质量较差时，系统会返回详细的错误信息和建议
+- **商户匹配失败**: 如果无法匹配到合适的商户，系统会提供手动选择选项
+- **数据校正**: 用户可以在确认阶段修正任何解析错误
+
 ```
 
 ## 数据模型
