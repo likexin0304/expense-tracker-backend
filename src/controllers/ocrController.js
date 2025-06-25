@@ -443,6 +443,118 @@ class OCRController {
             });
         }
     }
+
+    /**
+     * 生成iOS快捷指令文件
+     * GET /api/ocr/shortcuts/generate
+     */
+    static async generateShortcut(req, res) {
+        try {
+            const userId = req.user.id;
+            const baseURL = process.env.NODE_ENV === 'production' 
+                ? 'https://expense-tracker-backend-ccuxsyehj-likexin0304s-projects.vercel.app'
+                : 'http://localhost:3000';
+            
+            // iOS快捷指令配置
+            const shortcutConfig = {
+                "WFWorkflowActions": [
+                    {
+                        "WFWorkflowActionIdentifier": "is.workflow.actions.takephoto",
+                        "WFWorkflowActionParameters": {
+                            "WFCameraCaptureShowPreview": false
+                        }
+                    },
+                    {
+                        "WFWorkflowActionIdentifier": "is.workflow.actions.extracttextfromimage",
+                        "WFWorkflowActionParameters": {}
+                    },
+                    {
+                        "WFWorkflowActionIdentifier": "is.workflow.actions.request",
+                        "WFWorkflowActionParameters": {
+                            "WFHTTPMethod": "POST",
+                            "WFURL": `${baseURL}/api/ocr/parse`,
+                            "WFHTTPHeaders": {
+                                "Content-Type": "application/json",
+                                "Authorization": `Bearer {{用户需要替换为实际token}}`
+                            },
+                            "WFHTTPBodyType": "JSON",
+                            "WFJSONValues": {
+                                "text": "{{ExtractedText}}"
+                            }
+                        }
+                    },
+                    {
+                        "WFWorkflowActionIdentifier": "is.workflow.actions.getvalueforkey",
+                        "WFWorkflowActionParameters": {
+                            "WFDictionaryKey": "data"
+                        }
+                    },
+                    {
+                        "WFWorkflowActionIdentifier": "is.workflow.actions.conditional",
+                        "WFWorkflowActionParameters": {
+                            "WFCondition": 1,
+                            "WFConditionalIfTrueActions": [
+                                {
+                                    "WFWorkflowActionIdentifier": "is.workflow.actions.shownotification",
+                                    "WFWorkflowActionParameters": {
+                                        "WFNotificationActionTitle": "记账成功",
+                                        "WFNotificationActionBody": "已自动识别并创建支出记录"
+                                    }
+                                }
+                            ],
+                            "WFConditionalIfFalseActions": [
+                                {
+                                    "WFWorkflowActionIdentifier": "is.workflow.actions.shownotification",
+                                    "WFWorkflowActionParameters": {
+                                        "WFNotificationActionTitle": "识别失败",
+                                        "WFNotificationActionBody": "请手动添加支出记录"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "WFWorkflowName": "智能记账",
+                "WFWorkflowIcon": {
+                    "WFWorkflowIconStartColor": 2071128575,
+                    "WFWorkflowIconGlyphNumber": 61440
+                },
+                "WFWorkflowInputContentItemClasses": [],
+                "WFWorkflowImportQuestions": []
+            };
+
+            console.log('📱 生成iOS快捷指令配置:', { userId, baseURL });
+
+            res.status(200).json({
+                success: true,
+                message: 'iOS快捷指令配置生成成功',
+                data: {
+                    shortcutConfig,
+                    setupInstructions: [
+                        '1. 在iOS设备上打开"快捷指令"应用',
+                        '2. 点击右上角"+"创建新快捷指令',
+                        '3. 选择"高级" → "导入快捷指令"',
+                        '4. 粘贴此配置JSON',
+                        '5. 替换Authorization头中的token为您的访问令牌',
+                        '6. 保存并添加到Siri'
+                    ],
+                    apiInfo: {
+                        endpoint: `${baseURL}/api/ocr/parse`,
+                        authRequired: true,
+                        tokenHint: '请在iOS应用中获取您的访问令牌并替换{{用户需要替换为实际token}}'
+                    }
+                }
+            });
+
+        } catch (error) {
+            console.error('❌ 生成快捷指令失败:', error);
+            res.status(500).json({
+                success: false,
+                message: '生成快捷指令失败',
+                error: error.message
+            });
+        }
+    }
 }
 
 module.exports = OCRController; 

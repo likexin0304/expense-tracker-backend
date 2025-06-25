@@ -276,7 +276,17 @@ Authorization: Bearer <supabase_access_token>
     "GET /api/expense/trends",
     "GET /api/expense/:id",
     "PUT /api/expense/:id",
-    "DELETE /api/expense/:id"
+    "DELETE /api/expense/:id",
+    "POST /api/ocr/parse",
+    "POST /api/ocr/parse-auto (🆕 自动创建)",
+    "POST /api/ocr/confirm/:recordId",
+    "GET /api/ocr/records",
+    "GET /api/ocr/records/:recordId",
+    "DELETE /api/ocr/records/:recordId",
+    "GET /api/ocr/statistics",
+    "GET /api/ocr/merchants",
+    "POST /api/ocr/merchants/match",
+    "GET /api/ocr/shortcuts/generate (🆕 iOS快捷指令)"
   ],
   "errorHandling": {
     "jsonParseErrors": "会提供详细的格式错误提示和修复建议",
@@ -1351,7 +1361,12 @@ OCR自动识别功能可以自动解析账单文本，提取商户、金额、�
 **工作流程:**
 1. 提交OCR文本 → 2. 系统解析 → 3. 用户确认 → 4. 创建支出记录
 
-### 1. 解析OCR文本
+**🆕 新增功能:**
+- ✅ 智能自动确认：高置信度时自动创建支出记录
+- ✅ iOS快捷指令生成：一键生成iOS快捷指令配置
+- ✅ URL路径验证：避免常见的路径重复错误
+
+### 1. 解析OCR文本（基础版）
 
 **POST** `/api/ocr/parse`
 
@@ -1427,6 +1442,67 @@ OCR自动识别功能可以自动解析账单文本，提取商户、金额、�
       "检查文本格式是否正确",
       "可以尝试重新拍照或调整图片质量"
     ]
+  }
+}
+```
+
+### 1.5. 🆕 智能解析并自动创建支出记录
+
+**POST** `/api/ocr/parse-auto`
+
+解析OCR文本，当置信度足够高时自动创建支出记录，跳过用户确认步骤。
+
+#### 请求参数
+```json
+{
+  "text": "麦当劳 2024-01-15 消费金额：¥25.80 支付方式：支付宝",
+  "autoCreateThreshold": 0.85
+}
+```
+
+#### 成功响应 - 自动创建 (201)
+```json
+{
+  "success": true,
+  "message": "自动识别并创建支出记录成功",
+  "data": {
+    "autoCreated": true,
+    "expense": {
+      "id": "expense-uuid",
+      "amount": 25.80,
+      "category": "餐饮",
+      "description": "麦当劳",
+      "date": "2024-01-15",
+      "paymentMethod": "支付宝",
+      "tags": ["自动创建", "OCR识别"],
+      "createdAt": "2024-01-15T10:35:00Z"
+    },
+    "ocrRecord": {
+      "id": "ocr-uuid",
+      "status": "confirmed",
+      "expenseId": "expense-uuid"
+    },
+    "confidence": 0.93,
+    "parsedData": { /* 完整解析结果 */ }
+  }
+}
+```
+
+#### 成功响应 - 需要确认 (200)
+```json
+{
+  "success": true,
+  "message": "解析成功，需要用户确认",
+  "data": {
+    "autoCreated": false,
+    "recordId": "ocr-uuid",
+    "parsedData": { /* 解析结果 */ },
+    "confidence": 0.75,
+    "suggestions": {
+      "shouldAutoCreate": false,
+      "needsReview": false,
+      "reason": "置信度 0.75 低于阈值 0.85"
+    }
   }
 }
 ```
@@ -1756,6 +1832,174 @@ OCR自动识别功能可以自动解析账单文本，提取商户、金额、�
 - **商户匹配失败**: 如果无法匹配到合适的商户，系统会提供手动选择选项
 - **数据校正**: 用户可以在确认阶段修正任何解析错误
 
+### 9. 🆕 生成iOS快捷指令配置
+
+**GET** `/api/ocr/shortcuts/generate`
+
+生成标准iOS快捷指令JSON配置，用户可以导入到iOS系统快捷指令应用中。
+
+#### 成功响应 (200)
+```json
+{
+  "success": true,
+  "message": "iOS快捷指令配置生成成功",
+  "data": {
+    "shortcutConfig": {
+      "WFWorkflowActions": [
+        {
+          "WFWorkflowActionIdentifier": "is.workflow.actions.takephoto",
+          "WFWorkflowActionParameters": {
+            "WFCameraCaptureShowPreview": false
+          }
+        },
+        {
+          "WFWorkflowActionIdentifier": "is.workflow.actions.extracttextfromimage",
+          "WFWorkflowActionParameters": {}
+        },
+        {
+          "WFWorkflowActionIdentifier": "is.workflow.actions.request",
+          "WFWorkflowActionParameters": {
+            "WFHTTPMethod": "POST",
+            "WFURL": "https://your-api-domain.com/api/ocr/parse-auto",
+            "WFHTTPHeaders": {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer {{用户需要替换为实际token}}"
+            },
+            "WFHTTPBodyType": "JSON",
+            "WFJSONValues": {
+              "text": "{{ExtractedText}}",
+              "autoCreateThreshold": 0.85
+            }
+          }
+        }
+      ],
+      "WFWorkflowName": "智能记账",
+      "WFWorkflowIcon": {
+        "WFWorkflowIconStartColor": 2071128575,
+        "WFWorkflowIconGlyphNumber": 61440
+      }
+    },
+    "setupInstructions": [
+      "1. 在iOS设备上打开"快捷指令"应用",
+      "2. 点击右上角"+"创建新快捷指令",
+      "3. 选择"高级" → "导入快捷指令"",
+      "4. 粘贴此配置JSON",
+      "5. 替换Authorization头中的token为您的访问令牌",
+      "6. 保存并添加到Siri"
+    ],
+    "apiInfo": {
+      "endpoint": "https://your-api-domain.com/api/ocr/parse-auto",
+      "authRequired": true,
+      "tokenHint": "请在iOS应用中获取您的访问令牌并替换{{用户需要替换为实际token}}"
+    }
+  }
+}
+```
+
+## 🚨 常见错误和修复方法
+
+### URL路径重复错误 (404错误)
+
+**错误现象**: `❌ 404: POST /api/api/ocr/parse`  
+**错误原因**: URL路径中重复了 `/api` 前缀
+
+#### iOS客户端正确配置
+
+```swift
+// ✅ 推荐的API配置方式
+struct APIConfig {
+    static let baseURL = "https://expense-tracker-backend-ccuxsyehj-likexin0304s-projects.vercel.app"
+    
+    enum Endpoint {
+        case health
+        case authRegister
+        case authLogin
+        case ocrParse
+        case ocrParseAuto
+        case ocrShortcuts
+        
+        var path: String {
+            switch self {
+            case .health:
+                return "/health"
+            case .authRegister:
+                return "/api/auth/register"
+            case .authLogin:
+                return "/api/auth/login"
+            case .ocrParse:
+                return "/api/ocr/parse"
+            case .ocrParseAuto:
+                return "/api/ocr/parse-auto"
+            case .ocrShortcuts:
+                return "/api/ocr/shortcuts/generate"
+            }
+        }
+        
+        var fullURL: String {
+            return APIConfig.baseURL + self.path
+        }
+    }
+}
+
+// ✅ 正确的API调用方式
+class OCRService {
+    func parseText(_ text: String) async throws -> OCRResponse {
+        // 使用预定义的端点，避免URL路径重复
+        var request = URLRequest(url: URL(string: APIConfig.Endpoint.ocrParseAuto.fullURL)!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if let token = UserDefaults.standard.string(forKey: "access_token") {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let requestData = ["text": text, "autoCreateThreshold": 0.85]
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestData)
+        
+        // 添加调试日志
+        print("🌐 OCR API Request: \(APIConfig.Endpoint.ocrParseAuto.fullURL)")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+        
+        print("📡 Response Status: \(httpResponse.statusCode)")
+        
+        guard 200...299 ~= httpResponse.statusCode else {
+            throw APIError.serverError(httpResponse.statusCode)
+        }
+        
+        return try JSONDecoder().decode(OCRResponse.self, from: data)
+    }
+}
+
+// ❌ 常见错误示例（不要这样做）
+// let wrongURL = "\(baseURL)/api/api/ocr/parse"  // 重复了/api
+// let wrongURL2 = baseURL + "/api/ocr/parse" // 如果baseURL已包含/api会重复
+```
+
+#### 调试建议
+
+1. **验证URL构建**:
+   ```swift
+   print("Base URL: \(APIConfig.baseURL)")
+   print("OCR Parse URL: \(APIConfig.Endpoint.ocrParse.fullURL)")
+   // 应该输出: https://expense-tracker-backend-ccuxsyehj-likexin0304s-projects.vercel.app/api/ocr/parse
+   ```
+
+2. **网络请求监控**:
+   ```swift
+   // 在发送请求前打印完整URL
+   print("🌐 Request URL: \(request.url?.absoluteString ?? "nil")")
+   ```
+
+3. **使用网络调试工具**:
+   - Xcode网络调试
+   - Charles或Proxyman代理工具
+   - iOS模拟器的网络日志
+
 ```
 
 ## 数据模型
@@ -1941,6 +2185,26 @@ curl -X GET http://localhost:3000/api/expense \
 
 # 获取支出统计（需要替换token）
 curl -X GET http://localhost:3000/api/expense/stats \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# 🆕 OCR解析文本（需要替换token）
+curl -X POST http://localhost:3000/api/ocr/parse \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"麦当劳 2024-01-15 消费金额：¥25.80 支付方式：支付宝"}'
+
+# 🆕 OCR智能解析并自动创建（需要替换token）
+curl -X POST http://localhost:3000/api/ocr/parse-auto \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"麦当劳 2024-01-15 消费金额：¥25.80 支付方式：支付宝","autoCreateThreshold":0.85}'
+
+# 🆕 获取iOS快捷指令配置（需要替换token）
+curl -X GET http://localhost:3000/api/ocr/shortcuts/generate \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# 🆕 获取OCR记录列表（需要替换token）
+curl -X GET http://localhost:3000/api/ocr/records \
   -H "Authorization: Bearer YOUR_TOKEN_HERE"
 ```
 

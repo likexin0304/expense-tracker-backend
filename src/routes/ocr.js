@@ -62,4 +62,11 @@ router.get('/merchants', OCRController.getMerchants);
  */
 router.post('/merchants/match', OCRController.matchMerchants);
 
+/**
+ * @route GET /api/ocr/shortcuts/generate
+ * @desc 生成iOS快捷指令配置
+ * @access Private
+ */
+router.get('/shortcuts/generate', OCRController.generateShortcut);
+
 module.exports = router; 

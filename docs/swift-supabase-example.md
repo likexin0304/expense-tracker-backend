@@ -76,6 +76,40 @@ struct SupabaseConfig {
 struct APIConfig {
     static let baseURL = "https://expense-tracker-backend-ccuxsyehj-likexin0304s-projects.vercel.app"
     static let timeout: TimeInterval = 30.0
+    
+    // 正确的端点配置 - 不要在baseURL后重复添加/api
+    enum Endpoint {
+        case health
+        case authRegister
+        case authLogin
+        case authMe
+        case ocrParse
+        case expenseList
+        case expenseCreate
+        
+        var path: String {
+            switch self {
+            case .health:
+                return "/health"
+            case .authRegister:
+                return "/api/auth/register"
+            case .authLogin:
+                return "/api/auth/login"
+            case .authMe:
+                return "/api/auth/me"
+            case .ocrParse:
+                return "/api/ocr/parse"
+            case .expenseList:
+                return "/api/expense"
+            case .expenseCreate:
+                return "/api/expense"
+            }
+        }
+        
+        var fullURL: String {
+            return APIConfig.baseURL + self.path
+        }
+    }
 }
 ```
 
@@ -185,7 +219,7 @@ class AuthManager: ObservableObject {
         }
     }
     
-    // 用户注册 - 使用后端API
+    // 用户注册 - 使用后端API（修复URL路径问题）
     func signUp(email: String, password: String, confirmPassword: String) async throws {
         let registerData = [
             "email": email,
@@ -195,7 +229,8 @@ class AuthManager: ObservableObject {
         
         let jsonData = try JSONSerialization.data(withJSONObject: registerData)
         
-        var request = URLRequest(url: URL(string: "\(APIConfig.baseURL)/api/auth/register")!)
+        // ✅ 正确的URL构建方式
+        var request = URLRequest(url: URL(string: APIConfig.Endpoint.authRegister.fullURL)!)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = jsonData
@@ -219,7 +254,7 @@ class AuthManager: ObservableObject {
         }
     }
     
-    // 用户登录 - 使用后端API
+    // 用户登录 - 使用后端API（修复URL路径问题）
     func signIn(email: String, password: String) async throws {
         let loginData = [
             "email": email,
@@ -228,7 +263,8 @@ class AuthManager: ObservableObject {
         
         let jsonData = try JSONSerialization.data(withJSONObject: loginData)
         
-        var request = URLRequest(url: URL(string: "\(APIConfig.baseURL)/api/auth/login")!)
+        // ✅ 正确的URL构建方式
+        var request = URLRequest(url: URL(string: APIConfig.Endpoint.authLogin.fullURL)!)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = jsonData
@@ -657,6 +693,91 @@ struct BudgetStatistics: Codable {
         case usagePercentage = "usage_percentage"
         case year, month
     }
+}
+```
+
+### 3. OCR服务（修复URL路径问题）
+```swift
+class OCRService {
+    private let apiService = APIService.shared
+    
+    // ✅ 正确的OCR解析API调用
+    func parseText(_ text: String, autoCreateThreshold: Double = 0.85) async throws -> OCRParseResponse {
+        let requestData = [
+            "text": text,
+            "autoCreateThreshold": autoCreateThreshold
+        ] as [String: Any]
+        
+        let jsonData = try JSONSerialization.data(withJSONObject: requestData)
+        
+        // ✅ 使用正确的URL构建方式，避免路径重复
+        var request = URLRequest(url: URL(string: APIConfig.Endpoint.ocrParse.fullURL)!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // 添加认证头
+        if let token = UserDefaults.standard.string(forKey: "access_token") {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        request.httpBody = jsonData
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+        
+        print("🌐 OCR API Request: \(APIConfig.Endpoint.ocrParse.fullURL)")
+        print("📡 Response Status: \(httpResponse.statusCode)")
+        
+        guard 200...299 ~= httpResponse.statusCode else {
+            throw APIError.serverError(httpResponse.statusCode)
+        }
+        
+        let apiResponse = try JSONDecoder().decode(APIResponse<OCRParseResponse>.self, from: data)
+        
+        guard let data = apiResponse.data else {
+            throw APIError.noData
+        }
+        
+        return data
+    }
+    
+    // 常见的URL路径错误示例（❌ 不要这样做）
+    private func incorrectURLUsage() {
+        // ❌ 错误方式1：手动拼接可能导致重复
+        // let wrongURL = "\(APIConfig.baseURL)/api/ocr/parse"
+        
+        // ❌ 错误方式2：如果baseURL已包含/api，再拼接会重复
+        // let wrongURL2 = APIConfig.baseURL + "/api/ocr/parse"
+        
+        // ✅ 正确方式：使用预定义的端点枚举
+        let correctURL = APIConfig.Endpoint.ocrParse.fullURL
+        print("正确的URL: \(correctURL)")
+    }
+}
+
+// OCR响应数据模型
+struct OCRParseResponse: Codable {
+    let recordId: String?
+    let parsedData: OCRParsedData?
+    let confidence: Double
+    let autoCreated: Bool?
+    let expense: Expense?
+    
+    enum CodingKeys: String, CodingKey {
+        case recordId, parsedData, confidence, autoCreated, expense
+    }
+}
+
+struct OCRParsedData: Codable {
+    let amount: Double?
+    let merchant: String?
+    let category: String?
+    let date: String?
+    let paymentMethod: String?
+    let overallConfidence: Double
 }
 ```
 
