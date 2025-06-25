@@ -2875,3 +2875,56 @@ class ShortcutGenerator {
 4. 必须使用路径参数而不是查询参数访问资源
 
 // ... existing code ...
+
+### 🔧 Express Trust Proxy配置修复
+
+#### 问题报告
+用户报告生产环境错误：
+```
+ValidationError: The 'X-Forwarded-For' header is set but the Express 'trust proxy' setting is false (default). 
+This could indicate a misconfiguration which would prevent express-rate-limit from accurately identifying users.
+```
+
+#### 问题分析
+- **错误类型**: ValidationError (ERR_ERL_UNEXPECTED_X_FORWARDED_FOR)
+- **发生位置**: express-rate-limit中间件
+- **环境**: 生产环境 (/var/task/ 表明是serverless环境，如Vercel)
+- **根本原因**: Express应用缺少 `app.set('trust proxy', true)` 配置
+
+#### 问题影响
+1. **rate limiting功能异常**: 无法正确识别真实客户端IP
+2. **安全风险**: 可能被恶意用户绕过限流
+3. **生产环境稳定性**: 持续的ValidationError日志
+
+#### 解决方案
+在 `src/app.js` 中添加trust proxy配置：
+```javascript
+// 🔧 信任代理服务器 - 修复Vercel/生产环境中的X-Forwarded-For错误
+// 这对于正确的IP识别和rate limiting是必需的
+app.set('trust proxy', true);
+```
+
+#### 技术细节
+**为什么需要trust proxy？**
+1. **代理环境**: Vercel、Heroku、AWS等云平台都使用反向代理
+2. **IP识别**: 代理服务器通过X-Forwarded-For头部传递真实客户端IP
+3. **Express默认**: 出于安全考虑，Express默认不信任这些头部
+4. **rate limiting**: express-rate-limit依赖正确的IP识别来工作
+
+**配置选项**:
+- `true`: 信任所有代理（适用于大多数云平台）
+- `false`: 不信任任何代理（默认）
+- `number`: 信任指定数量的跳数
+- `string/array`: 信任特定IP地址
+
+#### 验证方法
+1. **部署后测试**: 确认不再出现ValidationError
+2. **IP识别验证**: 检查rate limiting是否正常工作
+3. **日志监控**: 观察错误日志是否消失
+
+#### 预防措施
+- 在部署checklist中包含trust proxy配置检查
+- 添加生产环境配置验证脚本
+- 更新部署文档，强调代理配置的重要性
+
+// ... existing code ...

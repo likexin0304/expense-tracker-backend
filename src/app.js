@@ -18,6 +18,10 @@ const app = express();
 
 console.log('🚀 正在启动服务器...');
 
+// 🔧 信任代理服务器 - 修复Vercel/生产环境中的X-Forwarded-For错误
+// 这对于正确的IP识别和rate limiting是必需的
+app.set('trust proxy', true);
+
 // 安全中间件
 app.use(helmet());
 app.use(cors());
