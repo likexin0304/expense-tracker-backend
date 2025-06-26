@@ -184,6 +184,47 @@ app.get('/api/debug/routes', (req, res) => {
     });
 });
 
+// 智能路径重定向中间件 - 处理重复的/api前缀
+app.use((req, res, next) => {
+    // 检测 /api/api/ 路径模式
+    if (req.originalUrl.startsWith('/api/api/')) {
+        const correctedPath = req.originalUrl.replace('/api/api/', '/api/');
+        console.log(`🔧 自动修复重复路径: ${req.originalUrl} -> ${correctedPath}`);
+        
+        // 返回重定向提示而不是直接重定向，因为这通常是前端配置错误
+        return res.status(400).json({
+            success: false,
+            error: 'URL_PATH_DUPLICATE',
+            message: '检测到重复的API路径前缀',
+            details: {
+                received: req.originalUrl,
+                correct: correctedPath,
+                problem: '您的请求URL包含重复的/api前缀',
+                solution: '请检查前端代码中的API基础URL配置'
+            },
+            frontend_fix: {
+                description: '常见的前端修复方法',
+                examples: [
+                    {
+                        problem: 'baseURL = "https://domain.com/api" + "/api/ocr/parse"',
+                        solution: 'baseURL = "https://domain.com" + "/api/ocr/parse"'
+                    },
+                    {
+                        problem: 'const endpoint = "/api/api/ocr/parse"',
+                        solution: 'const endpoint = "/api/ocr/parse"'
+                    },
+                    {
+                        problem: 'iOS: APIConfig.baseURL + "/api/ocr/parse"',
+                        solution: 'iOS: 使用 APIConfig.Endpoint.ocrParse.rawValue'
+                    }
+                ]
+            },
+            available_routes: '/api/debug/routes'
+        });
+    }
+    next();
+});
+
 // 404处理
 app.use((req, res, next) => {
     console.log(`❌ 404: ${req.method} ${req.originalUrl}`);
