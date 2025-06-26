@@ -14,6 +14,13 @@ router.use(authenticateToken);
 router.post('/parse', OCRController.parseText);
 
 /**
+ * @route POST /api/ocr/parse-auto
+ * @desc 解析OCR文本并在高置信度时自动创建支出记录
+ * @access Private
+ */
+router.post('/parse-auto', OCRController.parseTextAndAutoCreate);
+
+/**
  * @route POST /api/ocr/confirm/:recordId
  * @desc 确认OCR解析结果并创建支出记录
  * @access Private

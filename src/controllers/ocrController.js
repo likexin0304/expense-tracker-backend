@@ -104,6 +104,176 @@ class OCRController {
     }
 
     /**
+     * 提交OCR文本进行解析并自动创建支出记录（高置信度时）
+     * POST /api/ocr/parse-auto
+     */
+    static async parseTextAndAutoCreate(req, res) {
+        try {
+            const { text, options = {}, autoCreateThreshold = 0.85 } = req.body;
+            const userId = req.user.id;
+
+            console.log('📱 收到OCR自动解析请求:', { 
+                userId, 
+                textLength: text?.length,
+                autoCreateThreshold 
+            });
+
+            // 验证输入
+            if (!text || typeof text !== 'string' || text.trim().length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: '请提供有效的OCR文本'
+                });
+            }
+
+            // 创建OCR记录
+            const ocrRecord = await OCRRecord.create(userId, text, {
+                status: 'processing'
+            });
+
+            try {
+                // 解析OCR文本
+                const parseResult = await OCRParser.parseText(text, options);
+
+                if (!parseResult.success) {
+                    // 标记为失败
+                    await OCRRecord.markAsFailed(ocrRecord.id, userId, parseResult.error);
+                    
+                    return res.status(400).json({
+                        success: false,
+                        message: '文本解析失败',
+                        error: parseResult.error,
+                        data: {
+                            recordId: ocrRecord.id
+                        }
+                    });
+                }
+
+                // 更新OCR记录
+                const updatedRecord = await OCRRecord.updateById(ocrRecord.id, userId, {
+                    parsedData: parseResult.data,
+                    confidenceScore: parseResult.data.overallConfidence,
+                    status: 'success'
+                });
+
+                const confidence = parseResult.data.overallConfidence;
+                const shouldAutoCreate = confidence >= autoCreateThreshold;
+
+                console.log('✅ OCR解析成功:', {
+                    recordId: ocrRecord.id,
+                    confidence: confidence,
+                    shouldAutoCreate: shouldAutoCreate,
+                    threshold: autoCreateThreshold
+                });
+
+                if (shouldAutoCreate) {
+                    // 高置信度，自动创建支出记录
+                    try {
+                        const expenseData = {
+                            amount: parseResult.data.amount?.value || 0,
+                            category: parseResult.data.category?.value || '其他',
+                            description: parseResult.data.merchant?.name || parseResult.data.description || '自动识别记录',
+                            date: parseResult.data.date?.value || new Date().toISOString(),
+                            location: parseResult.data.location || '',
+                            paymentMethod: parseResult.data.paymentMethod?.value || 'cash',
+                            tags: ['自动创建', 'OCR识别']
+                        };
+
+                        const expense = await Expense.create(userId, expenseData);
+
+                        // 标记OCR记录为已确认
+                        await OCRRecord.markAsConfirmed(ocrRecord.id, userId, expense.id);
+
+                        console.log('🚀 自动创建支出记录成功:', {
+                            recordId: ocrRecord.id,
+                            expenseId: expense.id,
+                            amount: expense.amount,
+                            confidence: confidence
+                        });
+
+                        return res.status(201).json({
+                            success: true,
+                            message: '自动识别并创建支出记录成功',
+                            data: {
+                                autoCreated: true,
+                                expense: expense.toJSON(),
+                                ocrRecord: {
+                                    id: updatedRecord.id,
+                                    status: 'confirmed',
+                                    expenseId: expense.id
+                                },
+                                confidence: confidence,
+                                parsedData: parseResult.data
+                            }
+                        });
+
+                    } catch (expenseError) {
+                        console.error('❌ 自动创建支出记录失败:', expenseError);
+                        
+                        // 自动创建失败，返回解析结果让用户手动确认
+                        return res.status(200).json({
+                            success: true,
+                            message: '解析成功，但自动创建失败，需要手动确认',
+                            data: {
+                                autoCreated: false,
+                                recordId: updatedRecord.id,
+                                parsedData: parseResult.data,
+                                confidence: confidence,
+                                error: expenseError.message,
+                                suggestions: {
+                                    shouldAutoCreate: false,
+                                    needsReview: true,
+                                    reason: '自动创建失败，需要手动确认'
+                                }
+                            }
+                        });
+                    }
+                } else {
+                    // 置信度不够，需要用户确认
+                    return res.status(200).json({
+                        success: true,
+                        message: '解析成功，需要用户确认',
+                        data: {
+                            autoCreated: false,
+                            recordId: updatedRecord.id,
+                            parsedData: parseResult.data,
+                            confidence: confidence,
+                            suggestions: {
+                                shouldAutoCreate: false,
+                                needsReview: confidence < 0.6,
+                                reason: `置信度 ${confidence.toFixed(2)} 低于阈值 ${autoCreateThreshold}`
+                            }
+                        }
+                    });
+                }
+
+            } catch (parseError) {
+                console.error('❌ OCR解析过程出错:', parseError);
+                
+                // 标记为失败
+                await OCRRecord.markAsFailed(ocrRecord.id, userId, parseError.message);
+                
+                return res.status(500).json({
+                    success: false,
+                    message: '解析过程中发生错误',
+                    error: parseError.message,
+                    data: {
+                        recordId: ocrRecord.id
+                    }
+                });
+            }
+
+        } catch (error) {
+            console.error('❌ OCR自动解析请求失败:', error);
+            res.status(500).json({
+                success: false,
+                message: '服务器内部错误',
+                error: error.message
+            });
+        }
+    }
+
+    /**
      * 确认OCR解析结果并创建支出记录
      * POST /api/ocr/confirm/:recordId
      */

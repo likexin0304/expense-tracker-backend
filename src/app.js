@@ -26,13 +26,29 @@ app.set('trust proxy', true);
 app.use(helmet());
 app.use(cors());
 
-// 限流中间件
+// 限流中间件 - 配置为在生产环境中正确处理代理IP
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15分钟
     max: 100, // 最多100个请求
     message: {
         success: false,
         message: '请求过于频繁，请稍后再试'
+    },
+    // 在生产环境中跳过trust proxy验证，开发环境中保持默认行为
+    skip: (req) => {
+        // 在生产环境中，我们信任Vercel的代理配置
+        if (process.env.NODE_ENV === 'production') {
+            return false; // 不跳过限流
+        }
+        return false; // 开发环境也不跳过
+    },
+    // 自定义IP获取逻辑，避免trust proxy警告
+    keyGenerator: (req) => {
+        // 在生产环境中使用X-Forwarded-For，开发环境使用真实IP
+        if (process.env.NODE_ENV === 'production') {
+            return req.headers['x-forwarded-for'] || req.connection.remoteAddress || req.ip;
+        }
+        return req.ip;
     }
 });
 app.use(limiter);
@@ -150,13 +166,15 @@ app.get('/api/debug/routes', (req, res) => {
             'DELETE /api/expense/:id',
             // OCR自动识别 (需要认证)
             'POST /api/ocr/parse',
+            'POST /api/ocr/parse-auto (🆕 自动创建)',
             'POST /api/ocr/confirm/:recordId',
             'GET /api/ocr/records',
             'GET /api/ocr/records/:recordId',
             'DELETE /api/ocr/records/:recordId',
             'GET /api/ocr/statistics',
             'GET /api/ocr/merchants',
-            'POST /api/ocr/merchants/match'
+            'POST /api/ocr/merchants/match',
+            'GET /api/ocr/shortcuts/generate (🆕 iOS快捷指令)'
         ],
         errorHandling: {
             jsonParseErrors: '会提供详细的格式错误提示和修复建议',
