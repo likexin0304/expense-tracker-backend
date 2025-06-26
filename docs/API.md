@@ -2000,8 +2000,6 @@ class OCRService {
    - Charles或Proxyman代理工具
    - iOS模拟器的网络日志
 
-```
-
 ## 数据模型
 
 ### User (用户)
@@ -2635,3 +2633,78 @@ func createExpense(_ expense: ExpenseCreate) async throws -> Expense {
 **最后更新:** 2024-06-17  
 **服务版本:** 基于 Supabase 的生产就绪版本  
 **部署状态:** 准备部署到 Vercel 
+
+## iOS客户端集成指导
+
+### 常见错误修复
+
+#### 1. URL路径重复错误 (❌ 404: POST /api/api/ocr/parse)
+
+**问题描述：**
+如果您的iOS应用发送请求到错误的URL（如 `/api/api/ocr/parse`），后端会返回400错误和详细的修复指导。
+
+**错误响应示例：**
+```json
+{
+  "success": false,
+  "error": "URL_PATH_DUPLICATE",
+  "message": "检测到重复的API路径前缀",
+  "details": {
+    "received": "/api/api/ocr/parse",
+    "correct": "/api/ocr/parse",
+    "problem": "您的请求URL包含重复的/api前缀",
+    "solution": "请检查前端代码中的API基础URL配置"
+  },
+  "frontend_fix": {
+    "description": "常见的前端修复方法",
+    "examples": [
+      {
+        "problem": "baseURL = \"https://domain.com/api\" + \"/api/ocr/parse\"",
+        "solution": "baseURL = \"https://domain.com\" + \"/api/ocr/parse\""
+      },
+      {
+        "problem": "const endpoint = \"/api/api/ocr/parse\"",
+        "solution": "const endpoint = \"/api/ocr/parse\""
+      },
+      {
+        "problem": "iOS: APIConfig.baseURL + \"/api/ocr/parse\"",
+        "solution": "iOS: 使用 APIConfig.Endpoint.ocrParse.rawValue"
+      }
+    ]
+  }
+}
+```
+
+**iOS修复方法：**
+
+1. **使用APIConfig.Endpoint枚举（推荐）：**
+```swift
+// ✅ 正确做法
+let url = APIConfig.baseURL + APIConfig.Endpoint.ocrParse.rawValue
+
+// ❌ 错误做法
+let url = APIConfig.baseURL + "/api/ocr/parse"
+```
+
+2. **检查baseURL配置：**
+```swift
+// ✅ 正确配置
+static let baseURL = "https://your-domain.com"
+
+// ❌ 错误配置
+static let baseURL = "https://your-domain.com/api"
+```
+
+3. **使用完整的APIConfig.Endpoint：**
+```swift
+enum APIConfig {
+    static let baseURL = "https://expense-tracker-backend-mocrhvaay-likexin0304s-projects.vercel.app"
+    
+    enum Endpoint: String {
+        case ocrParse = "/api/ocr/parse"
+        case ocrParseAuto = "/api/ocr/parse-auto"
+        case ocrShortcuts = "/api/ocr/shortcuts/generate"
+        // ... 其他端点
+    }
+}
+```

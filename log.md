@@ -3051,3 +3051,86 @@ router.post('/parse-auto', OCRController.parseTextAndAutoCreate);
 - ⏳ 生产环境：需要重新部署到Vercel
 
 // ... existing code ...
+
+## 2025-06-26 - URL路径重复错误修复 (v1.0.13)
+
+### 问题报告
+用户反馈出现了 `❌ 404: POST /api/api/ocr/parse` 错误，URL路径中出现了重复的 `/api` 前缀。
+
+### 问题分析
+1. **错误URL**: `/api/api/ocr/parse` - 重复了`/api`前缀，导致404错误
+2. **正确URL**: `/api/ocr/parse` - 返回401认证错误（正常行为）
+3. **根本原因**: 前端URL构建配置错误，可能是：
+   - baseURL已包含`/api`，端点又加了`/api`前缀
+   - 硬编码了错误的完整路径
+
+### 解决方案实现
+添加了智能路径重定向中间件在 `src/app.js` 中：
+
+```javascript
+// 智能路径重定向中间件 - 处理重复的/api前缀
+app.use((req, res, next) => {
+    // 检测 /api/api/ 路径模式
+    if (req.originalUrl.startsWith('/api/api/')) {
+        const correctedPath = req.originalUrl.replace('/api/api/', '/api/');
+        console.log(`🔧 自动修复重复路径: ${req.originalUrl} -> ${correctedPath}`);
+        
+        // 返回重定向提示而不是直接重定向，因为这通常是前端配置错误
+        return res.status(400).json({
+            success: false,
+            error: 'URL_PATH_DUPLICATE',
+            message: '检测到重复的API路径前缀',
+            details: {
+                received: req.originalUrl,
+                correct: correctedPath,
+                problem: '您的请求URL包含重复的/api前缀',
+                solution: '请检查前端代码中的API基础URL配置'
+            },
+            frontend_fix: {
+                description: '常见的前端修复方法',
+                examples: [
+                    {
+                        problem: 'baseURL = "https://domain.com/api" + "/api/ocr/parse"',
+                        solution: 'baseURL = "https://domain.com" + "/api/ocr/parse"'
+                    },
+                    {
+                        problem: 'const endpoint = "/api/api/ocr/parse"',
+                        solution: 'const endpoint = "/api/ocr/parse"'
+                    },
+                    {
+                        problem: 'iOS: APIConfig.baseURL + "/api/ocr/parse"',
+                        solution: 'iOS: 使用 APIConfig.Endpoint.ocrParse.rawValue'
+                    }
+                ]
+            },
+            available_routes: '/api/debug/routes'
+        });
+    }
+    next();
+});
+```
+
+### 功能特性
+1. **智能检测**: 自动检测 `/api/api/` 路径模式
+2. **详细错误信息**: 提供正确路径和错误原因
+3. **前端修复指导**: 包含iOS客户端的具体解决方案
+4. **400状态码**: 明确标识为客户端配置错误，而非服务器问题
+
+### 测试验证
+- **本地环境**: ✅ 智能重定向工作正常
+- **生产环境**: ✅ 已部署并验证功能
+- **错误路径**: `/api/api/ocr/parse` → 返回400错误和修复指导
+- **正确路径**: `/api/ocr/parse` → 返回401认证错误（正常）
+
+### 部署信息
+- **版本**: v1.0.13
+- **提交**: 71099eb - 修复URL路径重复问题
+- **生产URL**: https://expense-tracker-backend-mocrhvaay-likexin0304s-projects.vercel.app
+- **部署状态**: ✅ 成功部署
+
+### 文档更新
+- 更新 `docs/API.md` 添加iOS客户端错误修复指导
+- 提供详细的前端配置修复方法
+- 包含完整的APIConfig.Endpoint枚举示例
+
+// ... existing code ...

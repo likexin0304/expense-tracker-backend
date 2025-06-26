@@ -8,22 +8,22 @@
 - **部署状态**: ✅ Ready
 - **部署版本**: v1.0.12 - 完成API端点部署验证和Rate Limiting优化
 
-### 🌐 生产环境URL
+## 生产环境信息
 
-#### 主域名（推荐使用）
-```
-https://expense-tracker-backend-likexin0304s-projects.vercel.app
-```
+### 当前部署状态 ✅
+- **主域名**: https://expense-tracker-backend-likexin0304s-projects.vercel.app
+- **最新部署URL**: https://expense-tracker-backend-mocrhvaay-likexin0304s-projects.vercel.app
+- **备用域名**: https://expense-tracker-backend-xi-seven.vercel.app
+- **部署时间**: 2025-06-26 12:47:20 GMT+8
+- **部署版本**: v1.0.13 - URL路径重复错误修复版本
+- **部署状态**: ✅ Ready
 
-#### 最新部署URL
-```
-https://expense-tracker-backend-p64s4eb06-likexin0304s-projects.vercel.app
-```
-
-#### 备用域名
-```
-https://expense-tracker-backend-xi-seven.vercel.app
-```
+### 最新功能
+- ✅ 智能URL路径重定向：自动检测并修复重复的/api前缀
+- ✅ 详细错误信息：提供前端修复指导和iOS客户端解决方案
+- ✅ 33个API端点全部可用
+- ✅ OCR自动记账功能完整实现
+- ✅ Express Trust Proxy配置优化
 
 ### 🔧 环境变量配置
 
