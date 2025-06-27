@@ -14,7 +14,7 @@ class OCRController {
     static async parseText(req, res) {
         try {
             const { text, options = {} } = req.body;
-            const userId = req.user.id;
+            const userId = req.userId;
 
             console.log('📱 收到OCR解析请求:', { userId, textLength: text?.length });
 
@@ -110,7 +110,7 @@ class OCRController {
     static async parseTextAndAutoCreate(req, res) {
         try {
             const { text, options = {}, autoCreateThreshold = 0.85 } = req.body;
-            const userId = req.user.id;
+            const userId = req.userId;
 
             console.log('📱 收到OCR自动解析请求:', { 
                 userId, 
@@ -280,7 +280,7 @@ class OCRController {
     static async confirmAndCreateExpense(req, res) {
         try {
             const { recordId } = req.params;
-            const userId = req.user.id;
+            const userId = req.userId;
             const { 
                 amount, 
                 category, 
@@ -375,7 +375,7 @@ class OCRController {
      */
     static async getRecords(req, res) {
         try {
-            const userId = req.user.id;
+            const userId = req.userId;
             const { 
                 page = 1, 
                 limit = 20, 
@@ -420,7 +420,7 @@ class OCRController {
     static async getRecord(req, res) {
         try {
             const { recordId } = req.params;
-            const userId = req.user.id;
+            const userId = req.userId;
 
             const record = await OCRRecord.findById(recordId, userId);
             if (!record) {
@@ -452,7 +452,7 @@ class OCRController {
     static async deleteRecord(req, res) {
         try {
             const { recordId } = req.params;
-            const userId = req.user.id;
+            const userId = req.userId;
 
             const record = await OCRRecord.findById(recordId, userId);
             if (!record) {
@@ -485,7 +485,7 @@ class OCRController {
      */
     static async getStatistics(req, res) {
         try {
-            const userId = req.user.id;
+            const userId = req.userId;
 
             const stats = await OCRRecord.getStatistics(userId);
 
@@ -620,7 +620,7 @@ class OCRController {
      */
     static async generateShortcut(req, res) {
         try {
-            const userId = req.user.id;
+            const userId = req.userId;
             const baseURL = process.env.NODE_ENV === 'production' 
                 ? 'https://expense-tracker-backend-ccuxsyehj-likexin0304s-projects.vercel.app'
                 : 'http://localhost:3000';
