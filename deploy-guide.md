@@ -12,13 +12,14 @@
 
 ### 当前部署状态 ✅
 - **主域名**: https://expense-tracker-backend-likexin0304s-projects.vercel.app
-- **最新部署URL**: https://expense-tracker-backend-mocrhvaay-likexin0304s-projects.vercel.app
+- **最新部署URL**: https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app
 - **备用域名**: https://expense-tracker-backend-xi-seven.vercel.app
-- **部署时间**: 2025-06-26 12:47:20 GMT+8
-- **部署版本**: v1.0.13 - URL路径重复错误修复版本
+- **部署时间**: 2025-06-27 15:37:20 GMT+8
+- **部署版本**: v1.0.14 - OCR认证Bug修复版本
 - **部署状态**: ✅ Ready
 
 ### 最新功能
+- ✅ OCR认证Bug修复：统一使用req.userId，修复'Cannot read properties of undefined'错误
 - ✅ 智能URL路径重定向：自动检测并修复重复的/api前缀
 - ✅ 详细错误信息：提供前端修复指导和iOS客户端解决方案
 - ✅ 33个API端点全部可用

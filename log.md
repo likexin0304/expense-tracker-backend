@@ -3134,3 +3134,77 @@ app.use((req, res, next) => {
 - 包含完整的APIConfig.Endpoint枚举示例
 
 // ... existing code ...
+
+## 2025-06-27 - OCR认证Bug修复 (v1.0.14)
+
+### 问题报告
+用户反馈OCR解析API返回错误：
+- `❌ 后端解析失败: decodingError`
+- `❌ 错误：OCR识别失败：Network error: 后端解析失败: 数据解析失败`
+
+### 问题分析
+通过创建测试用户和API调试，发现根本原因：
+
+1. **认证中间件不一致**：
+   - 认证中间件 (`src/middleware/auth.js`) 设置：`req.userId = sessionData.user.id`
+   - OCR控制器期望：`const userId = req.user.id`
+
+2. **其他控制器对比**：
+   - `expenseController.js`：使用 `req.userId` ✅
+   - `authController.js`：使用 `req.userId` ✅  
+   - `budgetController.js`：使用 `req.userId` ✅
+   - `ocrController.js`：使用 `req.user.id` ❌
+
+3. **具体错误**：
+   - `Cannot read properties of undefined (reading 'id')`
+   - 因为 `req.user` 是 undefined，尝试访问 `.id` 属性失败
+
+### 解决方案实施
+**修复类型**: 后端Bug修复
+
+修改了 `src/controllers/ocrController.js` 中所有方法，将 `req.user.id` 改为 `req.userId`：
+
+1. `parseText()` - OCR文本解析
+2. `parseTextAndAutoCreate()` - OCR自动创建支出
+3. `confirmAndCreateExpense()` - 确认并创建支出记录
+4. `getRecords()` - 获取OCR记录列表
+5. `getRecord()` - 获取单个OCR记录
+6. `deleteRecord()` - 删除OCR记录
+7. `getStatistics()` - 获取OCR统计信息
+8. `generateShortcut()` - 生成iOS快捷指令
+
+### 修复验证
+- **本地测试**: ✅ 使用真实OCR文本测试成功
+- **生产环境**: ✅ 部署并验证API正常工作
+- **API响应**: 正确解析OCR文本，返回结构化数据
+
+### 测试结果
+```json
+{
+  "success": true,
+  "message": "部分解析成功",
+  "data": {
+    "recordId": "594dc747-26db-414d-8704-b21a40ab7f7b",
+    "parsedData": {
+      "amount": 4,
+      "amountConfidence": 0.5,
+      "merchant": null,
+      "category": "其他",
+      "overallConfidence": 0.41
+    }
+  }
+}
+```
+
+### 部署信息
+- **版本**: v1.0.14
+- **提交**: 77c5da1 - OCR控制器认证Bug修复
+- **生产URL**: https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app
+- **部署状态**: ✅ 成功部署并测试通过
+
+### 影响范围
+- **前端**: 无需修改，问题完全在后端
+- **iOS应用**: 现在可以正常使用所有OCR相关功能
+- **API一致性**: 所有控制器现在统一使用 `req.userId`
+
+// ... existing code ...
