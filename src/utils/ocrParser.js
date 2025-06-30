@@ -12,57 +12,128 @@ class OCRParser {
      */
     static async parseText(text, options = {}) {
         try {
-            console.log('🔍 开始解析OCR文本:', { textLength: text.length });
+            console.log('🔍 开始解析OCR文本:', { textLength: text?.length || 0 });
             
             if (!text || typeof text !== 'string') {
-                throw new Error('无效的文本输入');
+                console.error('❌ OCR文本无效:', { text: typeof text });
+                return {
+                    success: false,
+                    error: '无效的文本输入',
+                    data: null,
+                    message: '无效的文本输入'
+                };
+            }
+
+            // 确保文本有最小长度
+            if (text.trim().length < 5) {
+                console.error('❌ OCR文本过短:', { textLength: text.length });
+                return {
+                    success: false,
+                    error: '文本内容过短，无法解析',
+                    data: null,
+                    message: '文本内容过短，无法解析'
+                };
             }
 
             const cleanText = this.cleanText(text);
             console.log('🧹 清理后的文本:', { cleanTextLength: cleanText.length });
 
             // 解析各个字段
-            const amount = this.parseAmount(cleanText);
-            const date = this.parseDate(cleanText);
-            const merchants = await this.parseMerchant(cleanText);
-            const paymentMethod = this.parsePaymentMethod(cleanText);
+            let amount = null;
+            let date = null;
+            let merchants = [];
+            let paymentMethod = null;
+
+            try {
+                amount = this.parseAmount(cleanText);
+            } catch (error) {
+                console.error('❌ 解析金额失败:', error);
+                amount = null;
+            }
+
+            try {
+                date = this.parseDate(cleanText);
+            } catch (error) {
+                console.error('❌ 解析日期失败:', error);
+                date = { 
+                    value: new Date().toISOString().split('T')[0], 
+                    confidence: 0.1, 
+                    source: '默认当前日期' 
+                };
+            }
+
+            try {
+                merchants = await this.parseMerchant(cleanText);
+            } catch (error) {
+                console.error('❌ 解析商户失败:', error);
+                merchants = [];
+            }
+
+            try {
+                paymentMethod = this.parsePaymentMethod(cleanText);
+            } catch (error) {
+                console.error('❌ 解析支付方式失败:', error);
+                paymentMethod = null;
+            }
 
             // 选择最佳商户匹配
             const bestMerchant = merchants.length > 0 ? merchants[0] : null;
-            const category = bestMerchant ? bestMerchant.merchant.category : this.inferCategory(cleanText);
+            
+            let category = '其他';
+            try {
+                category = bestMerchant ? bestMerchant.merchant.category : this.inferCategory(cleanText);
+            } catch (error) {
+                console.error('❌ 推断类别失败:', error);
+                category = '其他';
+            }
 
             // 计算整体置信度
-            const confidence = this.calculateOverallConfidence({
-                amount,
-                date,
-                merchant: bestMerchant,
-                paymentMethod,
-                textLength: cleanText.length
-            });
+            let confidence = 0;
+            try {
+                confidence = this.calculateOverallConfidence({
+                    amount,
+                    date,
+                    merchant: bestMerchant,
+                    paymentMethod,
+                    textLength: cleanText.length
+                });
+            } catch (error) {
+                console.error('❌ 计算置信度失败:', error);
+                confidence = 0.1;
+            }
 
+            // 确保所有字段都有默认值，避免null引用错误
             const result = {
                 success: true,
                 data: {
                     amount: amount?.value || null,
                     amountConfidence: amount?.confidence || 0,
-                    date: date?.value || null,
+                    date: date?.value || new Date().toISOString().split('T')[0],
                     dateConfidence: date?.confidence || 0,
                     merchant: bestMerchant?.merchant?.name || null,
                     merchantConfidence: bestMerchant?.confidence || 0,
-                    category: category,
+                    category: category || '其他',
                     paymentMethod: paymentMethod?.value || null,
                     paymentMethodConfidence: paymentMethod?.confidence || 0,
-                    allMerchants: merchants.map(m => ({
-                        name: m.merchant.name,
-                        category: m.merchant.category,
-                        confidence: m.confidence
-                    })),
+                    allMerchants: Array.isArray(merchants) ? merchants.map(m => ({
+                        name: m.merchant?.name || '未知商户',
+                        category: m.merchant?.category || '其他',
+                        confidence: m.confidence || 0
+                    })) : [],
                     overallConfidence: confidence,
                     originalText: text,
                     cleanedText: cleanText
                 },
                 message: confidence > 0.7 ? '解析成功' : confidence > 0.4 ? '部分解析成功' : '解析置信度较低'
             };
+
+            // 验证解析结果
+            try {
+                this.validateParsedData(result.data);
+            } catch (error) {
+                console.warn('⚠️ 解析结果验证警告:', error.message);
+                // 继续处理，不中断流程
+            }
 
             console.log('✅ OCR文本解析完成:', {
                 amount: result.data.amount,
@@ -76,8 +147,12 @@ class OCRParser {
             console.error('❌ OCR文本解析失败:', error);
             return {
                 success: false,
-                error: error.message,
-                data: null
+                error: error.message || '解析过程中发生未知错误',
+                data: {
+                    originalText: text || '',
+                    overallConfidence: 0
+                },
+                message: '解析失败'
             };
         }
     }
@@ -368,44 +443,51 @@ class OCRParser {
     }
 
     /**
-     * 验证解析结果
-     * @param {Object} parsedData - 解析结果
-     * @returns {Object} 验证结果
+     * 验证解析后的数据
+     * @param {Object} parsedData - 解析后的数据
+     * @returns {boolean} 是否有效
      */
     static validateParsedData(parsedData) {
-        const errors = [];
-        const warnings = [];
+        if (!parsedData) {
+            throw new Error('解析数据为空');
+        }
 
         // 验证金额
-        if (!parsedData.amount || parsedData.amount <= 0) {
-            errors.push('未能识别有效金额');
-        } else if (parsedData.amount > 100000) {
-            warnings.push('金额异常高，请确认');
+        if (parsedData.amount !== null && (isNaN(parsedData.amount) || parsedData.amount < 0 || parsedData.amount > 1000000)) {
+            console.warn('⚠️ 金额验证失败:', parsedData.amount);
+            parsedData.amount = null;
+            parsedData.amountConfidence = 0;
         }
 
         // 验证日期
         if (parsedData.date) {
-            const date = new Date(parsedData.date);
-            const now = new Date();
-            const oneYearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
-            const oneMonthLater = new Date(now.getFullYear(), now.getMonth() + 1, now.getDate());
-
-            if (date < oneYearAgo || date > oneMonthLater) {
-                warnings.push('日期超出常见范围，请确认');
+            try {
+                const date = new Date(parsedData.date);
+                if (isNaN(date.getTime())) {
+                    console.warn('⚠️ 日期格式无效:', parsedData.date);
+                    parsedData.date = new Date().toISOString().split('T')[0];
+                    parsedData.dateConfidence = 0.1;
+                }
+            } catch (e) {
+                console.warn('⚠️ 日期验证失败:', e);
+                parsedData.date = new Date().toISOString().split('T')[0];
+                parsedData.dateConfidence = 0.1;
             }
         }
 
         // 验证商户
-        if (!parsedData.merchant) {
-            warnings.push('未能识别商户信息');
+        if (parsedData.merchant && typeof parsedData.merchant !== 'string') {
+            console.warn('⚠️ 商户名称格式无效:', parsedData.merchant);
+            parsedData.merchant = String(parsedData.merchant);
         }
 
-        return {
-            isValid: errors.length === 0,
-            errors,
-            warnings,
-            confidence: parsedData.overallConfidence
-        };
+        // 验证置信度
+        if (isNaN(parsedData.overallConfidence) || parsedData.overallConfidence < 0 || parsedData.overallConfidence > 1) {
+            console.warn('⚠️ 置信度范围无效:', parsedData.overallConfidence);
+            parsedData.overallConfidence = 0.1;
+        }
+
+        return true;
     }
 }
 
