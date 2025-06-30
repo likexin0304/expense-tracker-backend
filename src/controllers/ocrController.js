@@ -30,6 +30,16 @@ class OCRController {
             const ocrRecord = await OCRRecord.create(userId, text, {
                 status: 'processing'
             });
+            
+            // 检查OCR记录是否成功创建
+            if (!ocrRecord || !ocrRecord.id) {
+                console.error('❌ OCR记录创建失败');
+                return res.status(500).json({
+                    success: false,
+                    message: 'OCR记录创建失败',
+                    error: 'Failed to create OCR record'
+                });
+            }
 
             try {
                 // 解析OCR文本
@@ -130,6 +140,16 @@ class OCRController {
             const ocrRecord = await OCRRecord.create(userId, text, {
                 status: 'processing'
             });
+            
+            // 检查OCR记录是否成功创建
+            if (!ocrRecord || !ocrRecord.id) {
+                console.error('❌ OCR记录创建失败');
+                return res.status(500).json({
+                    success: false,
+                    message: 'OCR记录创建失败',
+                    error: 'Failed to create OCR record'
+                });
+            }
 
             try {
                 // 解析OCR文本
@@ -253,7 +273,7 @@ class OCRController {
                 // 标记为失败
                 await OCRRecord.markAsFailed(ocrRecord.id, userId, parseError.message);
                 
-                return res.status(500).json({
+                res.status(500).json({
                     success: false,
                     message: '解析过程中发生错误',
                     error: parseError.message,
@@ -264,7 +284,7 @@ class OCRController {
             }
 
         } catch (error) {
-            console.error('❌ OCR自动解析请求失败:', error);
+            console.error('❌ OCR解析请求失败:', error);
             res.status(500).json({
                 success: false,
                 message: '服务器内部错误',
