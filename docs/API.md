@@ -1898,66 +1898,97 @@ OCR自动识别功能可以自动解析账单文本，提取商户、金额、�
 
 ## 🚨 常见错误和修复方法
 
-### URL路径重复错误 (404错误)
+### URL路径重复错误 (❌ 400: POST /api/api/ocr/parse)
 
-**错误现象**: `❌ 404: POST /api/api/ocr/parse`  
-**错误原因**: URL路径中重复了 `/api` 前缀
+**错误现象**: `❌ 400: POST /api/api/ocr/parse`  
+**错误原因**: URL路径中重复了 `/api` 前缀  
+**服务器响应**: 智能检测并返回详细修复指导
+
+#### 后端智能错误检测
+
+当检测到URL路径重复时，后端会返回详细的错误信息：
+
+```json
+{
+  "success": false,
+  "error": "URL_PATH_DUPLICATE",
+  "message": "检测到重复的API路径前缀",
+  "details": {
+    "received": "/api/api/ocr/parse",
+    "correct": "/api/ocr/parse",
+    "problem": "您的请求URL包含重复的/api前缀",
+    "solution": "请检查前端代码中的API基础URL配置"
+  },
+  "ios_client_fix": {
+    "description": "iOS客户端推荐的修复方法",
+    "recommended_approach": {
+      "title": "使用APIConfig.Endpoint枚举（推荐）",
+      "code": "// 详细的Swift代码示例..."
+    },
+    "common_mistakes": [
+      {
+        "problem": "baseURL已包含/api，但又添加了/api前缀",
+        "wrong": "let baseURL = \"https://domain.com/api\"\\nlet url = baseURL + \"/api/ocr/parse\"",
+        "correct": "let baseURL = \"https://domain.com\"\\nlet url = baseURL + \"/api/ocr/parse\""
+      }
+    ]
+  },
+  "help": {
+    "correct_url": "/api/ocr/parse",
+    "test_command": "curl -X POST http://localhost:3000/api/ocr/parse",
+    "documentation": "/api/debug/routes"
+  }
+}
+```
 
 #### iOS客户端正确配置
 
 ```swift
 // ✅ 推荐的API配置方式
 struct APIConfig {
-    static let baseURL = "https://expense-tracker-backend-ccuxsyehj-likexin0304s-projects.vercel.app"
+    static let baseURL = "https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app"
     
-    enum Endpoint {
-        case health
-        case authRegister
-        case authLogin
-        case ocrParse
-        case ocrParseAuto
-        case ocrShortcuts
-        
-        var path: String {
-            switch self {
-            case .health:
-                return "/health"
-            case .authRegister:
-                return "/api/auth/register"
-            case .authLogin:
-                return "/api/auth/login"
-            case .ocrParse:
-                return "/api/ocr/parse"
-            case .ocrParseAuto:
-                return "/api/ocr/parse-auto"
-            case .ocrShortcuts:
-                return "/api/ocr/shortcuts/generate"
-            }
-        }
+    enum Endpoint: String {
+        case health = "/health"
+        case authRegister = "/api/auth/register"
+        case authLogin = "/api/auth/login"
+        case ocrParse = "/api/ocr/parse"
+        case ocrParseAuto = "/api/ocr/parse-auto"
+        case ocrShortcuts = "/api/ocr/shortcuts/generate"
+        case ocrRecords = "/api/ocr/records"
+        case ocrMerchants = "/api/ocr/merchants"
+        case expenseCreate = "/api/expense"
+        case budgetCurrent = "/api/budget/current"
         
         var fullURL: String {
-            return APIConfig.baseURL + self.path
+            return APIConfig.baseURL + self.rawValue
         }
     }
 }
 
-// ✅ 正确的API调用方式
+// ✅ 正确的OCR自动识别API调用
 class OCRService {
-    func parseText(_ text: String) async throws -> OCRResponse {
+    func parseTextAndAutoCreate(_ text: String, threshold: Double = 0.85) async throws -> OCRAutoResponse {
         // 使用预定义的端点，避免URL路径重复
         var request = URLRequest(url: URL(string: APIConfig.Endpoint.ocrParseAuto.fullURL)!)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
+        // 添加认证头部
         if let token = UserDefaults.standard.string(forKey: "access_token") {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
-        let requestData = ["text": text, "autoCreateThreshold": 0.85]
+        // 构建请求体
+        let requestData: [String: Any] = [
+            "text": text,
+            "autoCreateThreshold": threshold
+        ]
         request.httpBody = try JSONSerialization.data(withJSONObject: requestData)
         
         // 添加调试日志
-        print("🌐 OCR API Request: \(APIConfig.Endpoint.ocrParseAuto.fullURL)")
+        print("🌐 OCR Auto Parse Request: \(APIConfig.Endpoint.ocrParseAuto.fullURL)")
+        print("📝 Request Body: \(String(data: request.httpBody!, encoding: .utf8) ?? "nil")")
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
@@ -1967,17 +1998,232 @@ class OCRService {
         
         print("📡 Response Status: \(httpResponse.statusCode)")
         
-        guard 200...299 ~= httpResponse.statusCode else {
+        // 处理不同的响应状态
+        switch httpResponse.statusCode {
+        case 200...299:
+            return try JSONDecoder().decode(OCRAutoResponse.self, from: data)
+        case 400:
+            // 可能是URL路径重复错误，打印详细信息
+            if let errorData = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                print("❌ API Error: \(errorData)")
+                if let error = errorData["error"] as? String, error == "URL_PATH_DUPLICATE" {
+                    print("💡 URL路径重复错误，请检查API配置")
+                }
+            }
+            throw APIError.badRequest
+        case 401:
+            throw APIError.unauthorized
+        default:
             throw APIError.serverError(httpResponse.statusCode)
         }
+    }
+    
+    // ✅ 基础OCR解析（需要用户确认）
+    func parseText(_ text: String) async throws -> OCRParseResponse {
+        var request = URLRequest(url: URL(string: APIConfig.Endpoint.ocrParse.fullURL)!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        return try JSONDecoder().decode(OCRResponse.self, from: data)
+        if let token = UserDefaults.standard.string(forKey: "access_token") {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let requestData = ["text": text]
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestData)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              200...299 ~= httpResponse.statusCode else {
+            throw APIError.serverError((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+        
+        return try JSONDecoder().decode(OCRParseResponse.self, from: data)
+    }
+    
+    // ✅ 确认并创建支出记录
+    func confirmOCRRecord(recordId: String, corrections: [String: Any]? = nil) async throws -> ExpenseResponse {
+        let url = "\(APIConfig.baseURL)/api/ocr/confirm/\(recordId)"
+        var request = URLRequest(url: URL(string: url)!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if let token = UserDefaults.standard.string(forKey: "access_token") {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let requestData: [String: Any] = [
+            "confirmed": true,
+            "corrections": corrections ?? [:]
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestData)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              200...299 ~= httpResponse.statusCode else {
+            throw APIError.serverError((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+        
+        return try JSONDecoder().decode(ExpenseResponse.self, from: data)
     }
 }
 
 // ❌ 常见错误示例（不要这样做）
-// let wrongURL = "\(baseURL)/api/api/ocr/parse"  // 重复了/api
-// let wrongURL2 = baseURL + "/api/ocr/parse" // 如果baseURL已包含/api会重复
+/*
+// 错误1: baseURL包含/api，但又添加/api前缀
+let baseURL = "https://domain.com/api"
+let wrongURL = baseURL + "/api/ocr/parse"  // 结果: /api/api/ocr/parse
+
+// 错误2: 硬编码重复路径
+let wrongEndpoint = "/api/api/ocr/parse"
+
+// 错误3: URL字符串拼接错误
+let wrongURL2 = "\(baseURL)/api/api/ocr/parse"
+*/
+```
+
+#### 数据模型定义
+
+```swift
+// OCR自动识别响应模型
+struct OCRAutoResponse: Codable {
+    let success: Bool
+    let message: String
+    let data: OCRAutoData
+}
+
+struct OCRAutoData: Codable {
+    let autoCreated: Bool
+    let expense: Expense?
+    let ocrRecord: OCRRecord?
+    let recordId: String?
+    let confidence: Double
+    let parsedData: ParsedData
+    let suggestions: Suggestions?
+}
+
+// OCR基础解析响应模型
+struct OCRParseResponse: Codable {
+    let success: Bool
+    let message: String
+    let data: OCRParseData
+}
+
+struct OCRParseData: Codable {
+    let record: OCRRecord
+}
+
+// OCR记录模型
+struct OCRRecord: Codable {
+    let id: String
+    let originalText: String
+    let parsedData: ParsedData
+    let confidenceScore: Double
+    let status: String
+    let expenseId: String?
+    let createdAt: String
+}
+
+// 解析数据模型
+struct ParsedData: Codable {
+    let merchant: MerchantInfo?
+    let amount: AmountInfo?
+    let date: DateInfo?
+    let paymentMethod: PaymentMethodInfo?
+    let category: CategoryInfo?
+}
+
+struct MerchantInfo: Codable {
+    let name: String
+    let category: String
+    let confidence: Double
+    let matchType: String
+}
+
+struct AmountInfo: Codable {
+    let value: Double
+    let confidence: Double
+    let originalText: String
+}
+
+struct DateInfo: Codable {
+    let value: String
+    let confidence: Double
+    let originalText: String
+}
+
+struct PaymentMethodInfo: Codable {
+    let value: String
+    let confidence: Double
+    let originalText: String
+}
+
+struct CategoryInfo: Codable {
+    let value: String
+    let confidence: Double
+    let source: String
+}
+
+// 建议信息模型
+struct Suggestions: Codable {
+    let shouldAutoCreate: Bool
+    let needsReview: Bool
+    let reason: String?
+}
+
+// 支出记录模型
+struct Expense: Codable {
+    let id: String
+    let amount: Double
+    let category: String
+    let description: String
+    let date: String
+    let location: String?
+    let paymentMethod: String
+    let tags: [String]
+    let createdAt: String
+    let updatedAt: String
+}
+
+// 支出创建响应模型
+struct ExpenseResponse: Codable {
+    let success: Bool
+    let message: String
+    let data: ExpenseData
+}
+
+struct ExpenseData: Codable {
+    let expense: Expense
+    let ocrRecord: OCRRecord?
+}
+
+// 错误处理枚举
+enum APIError: Error {
+    case invalidResponse
+    case badRequest
+    case unauthorized
+    case serverError(Int)
+    case decodingError
+    case urlPathDuplicate(String)
+    
+    var description: String {
+        switch self {
+        case .invalidResponse:
+            return "无效的服务器响应"
+        case .badRequest:
+            return "请求参数错误"
+        case .unauthorized:
+            return "未授权，请先登录"
+        case .serverError(let code):
+            return "服务器错误 (\(code))"
+        case .decodingError:
+            return "数据解析失败"
+        case .urlPathDuplicate(let path):
+            return "URL路径重复: \(path)"
+        }
+    }
+}
 ```
 
 #### 调试建议
@@ -1985,20 +2231,165 @@ class OCRService {
 1. **验证URL构建**:
    ```swift
    print("Base URL: \(APIConfig.baseURL)")
-   print("OCR Parse URL: \(APIConfig.Endpoint.ocrParse.fullURL)")
-   // 应该输出: https://expense-tracker-backend-ccuxsyehj-likexin0304s-projects.vercel.app/api/ocr/parse
+   print("OCR Parse Auto URL: \(APIConfig.Endpoint.ocrParseAuto.fullURL)")
+   // 应该输出: https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app/api/ocr/parse-auto
    ```
 
 2. **网络请求监控**:
    ```swift
-   // 在发送请求前打印完整URL
+   // 在发送请求前打印完整URL和请求体
    print("🌐 Request URL: \(request.url?.absoluteString ?? "nil")")
+   print("📋 Request Headers: \(request.allHTTPHeaderFields ?? [:])")
+   if let body = request.httpBody, let bodyString = String(data: body, encoding: .utf8) {
+       print("📝 Request Body: \(bodyString)")
+   }
    ```
 
-3. **使用网络调试工具**:
+3. **错误响应处理**:
+   ```swift
+   // 处理400错误（可能是URL路径重复）
+   if httpResponse.statusCode == 400 {
+       if let errorData = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let error = errorData["error"] as? String,
+          error == "URL_PATH_DUPLICATE" {
+           print("❌ URL路径重复错误，请检查API配置")
+           print("💡 修复建议: \(errorData["ios_client_fix"] ?? "参考API文档")")
+           throw APIError.urlPathDuplicate(errorData["details"]?["received"] as? String ?? "unknown")
+       }
+   }
+   ```
+
+4. **使用网络调试工具**:
    - Xcode网络调试
    - Charles或Proxyman代理工具
    - iOS模拟器的网络日志
+
+#### 完整的自动记账功能集成示例
+
+```swift
+// 完整的自动记账服务
+class AutoExpenseService {
+    private let ocrService = OCRService()
+    
+    // 自动记账主流程
+    func processReceiptText(_ text: String) async throws -> AutoExpenseResult {
+        do {
+            // 1. 尝试自动识别并创建
+            let autoResponse = try await ocrService.parseTextAndAutoCreate(text, threshold: 0.85)
+            
+            if autoResponse.data.autoCreated {
+                // 自动创建成功
+                return .autoCreated(autoResponse.data.expense!)
+            } else {
+                // 需要用户确认
+                return .needsConfirmation(
+                    recordId: autoResponse.data.recordId!,
+                    parsedData: autoResponse.data.parsedData,
+                    confidence: autoResponse.data.confidence
+                )
+            }
+        } catch APIError.badRequest {
+            // 可能是URL路径重复或其他请求错误
+            print("❌ 请求错误，请检查API配置")
+            throw AutoExpenseError.configurationError
+        } catch APIError.unauthorized {
+            // 需要重新登录
+            throw AutoExpenseError.authenticationRequired
+        } catch {
+            // 其他错误
+            throw AutoExpenseError.processingFailed(error.localizedDescription)
+        }
+    }
+    
+    // 用户确认并创建支出记录
+    func confirmExpense(recordId: String, corrections: [String: Any]? = nil) async throws -> Expense {
+        let response = try await ocrService.confirmOCRRecord(recordId: recordId, corrections: corrections)
+        return response.data.expense
+    }
+}
+
+// 自动记账结果枚举
+enum AutoExpenseResult {
+    case autoCreated(Expense)
+    case needsConfirmation(recordId: String, parsedData: ParsedData, confidence: Double)
+}
+
+// 自动记账错误枚举
+enum AutoExpenseError: Error {
+    case configurationError
+    case authenticationRequired
+    case processingFailed(String)
+    
+    var description: String {
+        switch self {
+        case .configurationError:
+            return "API配置错误，请检查URL设置"
+        case .authenticationRequired:
+            return "需要重新登录"
+        case .processingFailed(let message):
+            return "处理失败: \(message)"
+        }
+    }
+}
+
+// 使用示例
+class ReceiptScanViewController: UIViewController {
+    private let autoExpenseService = AutoExpenseService()
+    
+    func processScannedText(_ text: String) {
+        Task {
+            do {
+                let result = try await autoExpenseService.processReceiptText(text)
+                
+                await MainActor.run {
+                    switch result {
+                    case .autoCreated(let expense):
+                        // 自动创建成功，显示成功提示
+                        showSuccessAlert(expense: expense)
+                    case .needsConfirmation(let recordId, let parsedData, let confidence):
+                        // 显示确认界面
+                        showConfirmationView(recordId: recordId, parsedData: parsedData, confidence: confidence)
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    showErrorAlert(error: error)
+                }
+            }
+        }
+    }
+    
+    private func showSuccessAlert(expense: Expense) {
+        let alert = UIAlertController(
+            title: "✅ 自动记账成功",
+            message: "已自动创建支出记录：\(expense.description) ¥\(expense.amount)",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "确定", style: .default))
+        present(alert, animated: true)
+    }
+    
+    private func showConfirmationView(recordId: String, parsedData: ParsedData, confidence: Double) {
+        // 显示确认界面，让用户检查和修正解析结果
+        let confirmVC = ExpenseConfirmationViewController(
+            recordId: recordId,
+            parsedData: parsedData,
+            confidence: confidence
+        )
+        present(confirmVC, animated: true)
+    }
+    
+    private func showErrorAlert(error: Error) {
+        let alert = UIAlertController(
+            title: "❌ 处理失败",
+            message: error.localizedDescription,
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "确定", style: .default))
+        present(alert, animated: true)
+    }
+}
+```
 
 ## 数据模型
 

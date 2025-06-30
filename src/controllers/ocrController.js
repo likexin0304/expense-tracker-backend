@@ -22,37 +22,57 @@ class OCRController {
             if (!text || typeof text !== 'string' || text.trim().length === 0) {
                 return res.status(400).json({
                     success: false,
-                    message: '请提供有效的OCR文本'
+                    message: '请提供有效的OCR文本',
+                    error: 'INVALID_TEXT',
+                    data: null
                 });
             }
 
             // 创建OCR记录
-            const ocrRecord = await OCRRecord.create(userId, text, {
-                status: 'processing'
-            });
-            
-            // 检查OCR记录是否成功创建
-            if (!ocrRecord || !ocrRecord.id) {
-                console.error('❌ OCR记录创建失败');
+            let ocrRecord = null;
+            try {
+                ocrRecord = await OCRRecord.create(userId, text, {
+                    status: 'processing'
+                });
+                
+                // 检查OCR记录是否成功创建
+                if (!ocrRecord || !ocrRecord.id) {
+                    console.error('❌ OCR记录创建失败');
+                    return res.status(500).json({
+                        success: false,
+                        message: 'OCR记录创建失败',
+                        error: 'RECORD_CREATION_FAILED',
+                        data: null
+                    });
+                }
+            } catch (dbError) {
+                console.error('❌ 数据库操作失败:', dbError);
                 return res.status(500).json({
                     success: false,
-                    message: 'OCR记录创建失败',
-                    error: 'Failed to create OCR record'
+                    message: '数据库操作失败',
+                    error: 'DATABASE_ERROR',
+                    data: null
                 });
             }
 
             try {
                 // 解析OCR文本
                 const parseResult = await OCRParser.parseText(text, options);
+                console.log('🔍 OCR解析结果:', { success: parseResult.success, hasData: !!parseResult.data });
 
                 if (!parseResult.success) {
                     // 标记为失败
-                    await OCRRecord.markAsFailed(ocrRecord.id, userId, parseResult.error);
+                    try {
+                        await OCRRecord.markAsFailed(ocrRecord.id, userId, parseResult.error);
+                    } catch (markError) {
+                        console.error('❌ 标记OCR记录失败时出错:', markError);
+                        // 继续执行，不中断响应
+                    }
                     
                     return res.status(400).json({
                         success: false,
                         message: '文本解析失败',
-                        error: parseResult.error,
+                        error: parseResult.error || 'PARSE_FAILED',
                         data: {
                             recordId: ocrRecord.id
                         }
@@ -60,11 +80,18 @@ class OCRController {
                 }
 
                 // 更新OCR记录
-                const updatedRecord = await OCRRecord.updateById(ocrRecord.id, userId, {
-                    parsedData: parseResult.data,
-                    confidenceScore: parseResult.data.overallConfidence,
-                    status: 'success'
-                });
+                let updatedRecord = null;
+                try {
+                    updatedRecord = await OCRRecord.updateById(ocrRecord.id, userId, {
+                        parsedData: parseResult.data,
+                        confidenceScore: parseResult.data.overallConfidence,
+                        status: 'success'
+                    });
+                } catch (updateError) {
+                    console.error('❌ 更新OCR记录失败:', updateError);
+                    // 继续执行，使用原始记录
+                    updatedRecord = ocrRecord;
+                }
 
                 console.log('✅ OCR解析成功:', {
                     recordId: ocrRecord.id,
@@ -73,30 +100,38 @@ class OCRController {
                     amount: parseResult.data.amount
                 });
 
-                res.status(200).json({
+                // 确保响应格式一致
+                const responseData = {
                     success: true,
-                    message: parseResult.message,
+                    message: parseResult.message || '解析成功',
                     data: {
-                        recordId: updatedRecord.id,
-                        parsedData: parseResult.data,
-                        confidence: parseResult.data.overallConfidence,
+                        recordId: updatedRecord?.id || ocrRecord.id,
+                        parsedData: parseResult.data || {},
+                        confidence: parseResult.data?.overallConfidence || 0,
                         suggestions: {
-                            shouldAutoCreate: parseResult.data.overallConfidence > 0.8,
-                            needsReview: parseResult.data.overallConfidence < 0.6
+                            shouldAutoCreate: (parseResult.data?.overallConfidence || 0) > 0.8,
+                            needsReview: (parseResult.data?.overallConfidence || 0) < 0.6
                         }
                     }
-                });
+                };
+
+                res.status(200).json(responseData);
 
             } catch (parseError) {
                 console.error('❌ OCR解析过程出错:', parseError);
                 
                 // 标记为失败
-                await OCRRecord.markAsFailed(ocrRecord.id, userId, parseError.message);
+                try {
+                    await OCRRecord.markAsFailed(ocrRecord.id, userId, parseError.message);
+                } catch (markError) {
+                    console.error('❌ 标记OCR记录失败时出错:', markError);
+                    // 继续执行，不中断响应
+                }
                 
                 res.status(500).json({
                     success: false,
                     message: '解析过程中发生错误',
-                    error: parseError.message,
+                    error: parseError.message || 'PARSE_ERROR',
                     data: {
                         recordId: ocrRecord.id
                     }
@@ -108,7 +143,8 @@ class OCRController {
             res.status(500).json({
                 success: false,
                 message: '服务器内部错误',
-                error: error.message
+                error: error.message || 'INTERNAL_SERVER_ERROR',
+                data: null
             });
         }
     }
@@ -132,37 +168,57 @@ class OCRController {
             if (!text || typeof text !== 'string' || text.trim().length === 0) {
                 return res.status(400).json({
                     success: false,
-                    message: '请提供有效的OCR文本'
+                    message: '请提供有效的OCR文本',
+                    error: 'INVALID_TEXT',
+                    data: null
                 });
             }
 
             // 创建OCR记录
-            const ocrRecord = await OCRRecord.create(userId, text, {
-                status: 'processing'
-            });
-            
-            // 检查OCR记录是否成功创建
-            if (!ocrRecord || !ocrRecord.id) {
-                console.error('❌ OCR记录创建失败');
+            let ocrRecord = null;
+            try {
+                ocrRecord = await OCRRecord.create(userId, text, {
+                    status: 'processing'
+                });
+                
+                // 检查OCR记录是否成功创建
+                if (!ocrRecord || !ocrRecord.id) {
+                    console.error('❌ OCR记录创建失败');
+                    return res.status(500).json({
+                        success: false,
+                        message: 'OCR记录创建失败',
+                        error: 'RECORD_CREATION_FAILED',
+                        data: null
+                    });
+                }
+            } catch (dbError) {
+                console.error('❌ 数据库操作失败:', dbError);
                 return res.status(500).json({
                     success: false,
-                    message: 'OCR记录创建失败',
-                    error: 'Failed to create OCR record'
+                    message: '数据库操作失败',
+                    error: 'DATABASE_ERROR',
+                    data: null
                 });
             }
 
             try {
                 // 解析OCR文本
                 const parseResult = await OCRParser.parseText(text, options);
+                console.log('🔍 OCR自动解析结果:', { success: parseResult.success, hasData: !!parseResult.data });
 
                 if (!parseResult.success) {
                     // 标记为失败
-                    await OCRRecord.markAsFailed(ocrRecord.id, userId, parseResult.error);
+                    try {
+                        await OCRRecord.markAsFailed(ocrRecord.id, userId, parseResult.error);
+                    } catch (markError) {
+                        console.error('❌ 标记OCR记录失败时出错:', markError);
+                        // 继续执行，不中断响应
+                    }
                     
                     return res.status(400).json({
                         success: false,
                         message: '文本解析失败',
-                        error: parseResult.error,
+                        error: parseResult.error || 'PARSE_FAILED',
                         data: {
                             recordId: ocrRecord.id
                         }
@@ -170,13 +226,20 @@ class OCRController {
                 }
 
                 // 更新OCR记录
-                const updatedRecord = await OCRRecord.updateById(ocrRecord.id, userId, {
-                    parsedData: parseResult.data,
-                    confidenceScore: parseResult.data.overallConfidence,
-                    status: 'success'
-                });
+                let updatedRecord = null;
+                try {
+                    updatedRecord = await OCRRecord.updateById(ocrRecord.id, userId, {
+                        parsedData: parseResult.data,
+                        confidenceScore: parseResult.data.overallConfidence,
+                        status: 'success'
+                    });
+                } catch (updateError) {
+                    console.error('❌ 更新OCR记录失败:', updateError);
+                    // 继续执行，使用原始记录
+                    updatedRecord = ocrRecord;
+                }
 
-                const confidence = parseResult.data.overallConfidence;
+                const confidence = parseResult.data.overallConfidence || 0;
                 const shouldAutoCreate = confidence >= autoCreateThreshold;
 
                 console.log('✅ OCR解析成功:', {
@@ -202,7 +265,12 @@ class OCRController {
                         const expense = await Expense.create(userId, expenseData);
 
                         // 标记OCR记录为已确认
-                        await OCRRecord.markAsConfirmed(ocrRecord.id, userId, expense.id);
+                        try {
+                            await OCRRecord.markAsConfirmed(ocrRecord.id, userId, expense.id);
+                        } catch (markError) {
+                            console.error('❌ 标记OCR记录已确认时出错:', markError);
+                            // 继续执行，不中断响应
+                        }
 
                         console.log('🚀 自动创建支出记录成功:', {
                             recordId: ocrRecord.id,
@@ -218,12 +286,12 @@ class OCRController {
                                 autoCreated: true,
                                 expense: expense.toJSON(),
                                 ocrRecord: {
-                                    id: updatedRecord.id,
+                                    id: updatedRecord?.id || ocrRecord.id,
                                     status: 'confirmed',
                                     expenseId: expense.id
                                 },
                                 confidence: confidence,
-                                parsedData: parseResult.data
+                                parsedData: parseResult.data || {}
                             }
                         });
 
@@ -236,10 +304,10 @@ class OCRController {
                             message: '解析成功，但自动创建失败，需要手动确认',
                             data: {
                                 autoCreated: false,
-                                recordId: updatedRecord.id,
-                                parsedData: parseResult.data,
+                                recordId: updatedRecord?.id || ocrRecord.id,
+                                parsedData: parseResult.data || {},
                                 confidence: confidence,
-                                error: expenseError.message,
+                                error: expenseError.message || 'AUTO_CREATE_FAILED',
                                 suggestions: {
                                     shouldAutoCreate: false,
                                     needsReview: true,
@@ -255,8 +323,8 @@ class OCRController {
                         message: '解析成功，需要用户确认',
                         data: {
                             autoCreated: false,
-                            recordId: updatedRecord.id,
-                            parsedData: parseResult.data,
+                            recordId: updatedRecord?.id || ocrRecord.id,
+                            parsedData: parseResult.data || {},
                             confidence: confidence,
                             suggestions: {
                                 shouldAutoCreate: false,
@@ -271,12 +339,17 @@ class OCRController {
                 console.error('❌ OCR解析过程出错:', parseError);
                 
                 // 标记为失败
-                await OCRRecord.markAsFailed(ocrRecord.id, userId, parseError.message);
+                try {
+                    await OCRRecord.markAsFailed(ocrRecord.id, userId, parseError.message);
+                } catch (markError) {
+                    console.error('❌ 标记OCR记录失败时出错:', markError);
+                    // 继续执行，不中断响应
+                }
                 
                 res.status(500).json({
                     success: false,
                     message: '解析过程中发生错误',
-                    error: parseError.message,
+                    error: parseError.message || 'PARSE_ERROR',
                     data: {
                         recordId: ocrRecord.id
                     }
@@ -288,7 +361,8 @@ class OCRController {
             res.status(500).json({
                 success: false,
                 message: '服务器内部错误',
-                error: error.message
+                error: error.message || 'INTERNAL_SERVER_ERROR',
+                data: null
             });
         }
     }

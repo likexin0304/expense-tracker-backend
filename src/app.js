@@ -26,7 +26,7 @@ app.set('trust proxy', true);
 app.use(helmet());
 app.use(cors());
 
-// 限流中间件 - 配置为在生产环境中正确处理代理IP
+// 限流中间件 - 优化配置以避免trust proxy警告
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15分钟
     max: 100, // 最多100个请求
@@ -34,22 +34,20 @@ const limiter = rateLimit({
         success: false,
         message: '请求过于频繁，请稍后再试'
     },
-    // 在生产环境中跳过trust proxy验证，开发环境中保持默认行为
-    skip: (req) => {
-        // 在生产环境中，我们信任Vercel的代理配置
-        if (process.env.NODE_ENV === 'production') {
-            return false; // 不跳过限流
-        }
-        return false; // 开发环境也不跳过
-    },
     // 自定义IP获取逻辑，避免trust proxy警告
     keyGenerator: (req) => {
-        // 在生产环境中使用X-Forwarded-For，开发环境使用真实IP
-        if (process.env.NODE_ENV === 'production') {
-            return req.headers['x-forwarded-for'] || req.connection.remoteAddress || req.ip;
+        // 在生产环境中使用X-Forwarded-For（由Vercel提供），开发环境使用真实IP
+        if (process.env.NODE_ENV === 'production' && req.headers['x-forwarded-for']) {
+            // 从X-Forwarded-For头部获取真实IP（取第一个IP）
+            const forwarded = req.headers['x-forwarded-for'];
+            return Array.isArray(forwarded) ? forwarded[0] : forwarded.split(',')[0].trim();
         }
-        return req.ip;
-    }
+        // 开发环境或没有代理头部时使用连接IP
+        return req.connection.remoteAddress || req.socket.remoteAddress || req.ip || 'unknown';
+    },
+    // 跳过trust proxy验证，使用自定义keyGenerator
+    skipSuccessfulRequests: false,
+    skipFailedRequests: false
 });
 app.use(limiter);
 
@@ -189,9 +187,9 @@ app.use((req, res, next) => {
     // 检测 /api/api/ 路径模式
     if (req.originalUrl.startsWith('/api/api/')) {
         const correctedPath = req.originalUrl.replace('/api/api/', '/api/');
-        console.log(`🔧 自动修复重复路径: ${req.originalUrl} -> ${correctedPath}`);
+        console.log(`🔧 检测到重复路径: ${req.originalUrl} -> ${correctedPath}`);
         
-        // 返回重定向提示而不是直接重定向，因为这通常是前端配置错误
+        // 返回详细的错误信息和修复指导
         return res.status(400).json({
             success: false,
             error: 'URL_PATH_DUPLICATE',
@@ -202,24 +200,55 @@ app.use((req, res, next) => {
                 problem: '您的请求URL包含重复的/api前缀',
                 solution: '请检查前端代码中的API基础URL配置'
             },
-            frontend_fix: {
-                description: '常见的前端修复方法',
-                examples: [
+            ios_client_fix: {
+                description: 'iOS客户端推荐的修复方法',
+                recommended_approach: {
+                    title: '使用APIConfig.Endpoint枚举（推荐）',
+                    code: `
+// ✅ 推荐的API配置方式
+struct APIConfig {
+    static let baseURL = "https://your-domain.com"
+    
+    enum Endpoint: String {
+        case ocrParse = "/api/ocr/parse"
+        case ocrParseAuto = "/api/ocr/parse-auto"
+        case ocrShortcuts = "/api/ocr/shortcuts/generate"
+        case authLogin = "/api/auth/login"
+        case authRegister = "/api/auth/register"
+        
+        var fullURL: String {
+            return APIConfig.baseURL + self.rawValue
+        }
+    }
+}
+
+// ✅ 正确的API调用方式
+let url = APIConfig.Endpoint.ocrParseAuto.fullURL
+                    `
+                },
+                common_mistakes: [
                     {
-                        problem: 'baseURL = "https://domain.com/api" + "/api/ocr/parse"',
-                        solution: 'baseURL = "https://domain.com" + "/api/ocr/parse"'
+                        problem: 'baseURL已包含/api，但又添加了/api前缀',
+                        wrong: 'let baseURL = "https://domain.com/api"\nlet url = baseURL + "/api/ocr/parse"',
+                        correct: 'let baseURL = "https://domain.com"\nlet url = baseURL + "/api/ocr/parse"'
                     },
                     {
-                        problem: 'const endpoint = "/api/api/ocr/parse"',
-                        solution: 'const endpoint = "/api/ocr/parse"'
+                        problem: '硬编码了重复的/api路径',
+                        wrong: 'let endpoint = "/api/api/ocr/parse"',
+                        correct: 'let endpoint = "/api/ocr/parse"'
                     },
                     {
-                        problem: 'iOS: APIConfig.baseURL + "/api/ocr/parse"',
-                        solution: 'iOS: 使用 APIConfig.Endpoint.ocrParse.rawValue'
+                        problem: 'URL字符串拼接错误',
+                        wrong: 'let url = "\\(baseURL)/api/api/ocr/parse"',
+                        correct: 'let url = "\\(baseURL)/api/ocr/parse"'
                     }
                 ]
             },
-            available_routes: '/api/debug/routes'
+            help: {
+                correct_url: correctedPath,
+                test_command: `curl -X ${req.method} http://localhost:3000${correctedPath}`,
+                documentation: '/api/debug/routes'
+            }
         });
     }
     next();
