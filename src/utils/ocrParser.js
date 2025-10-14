@@ -91,12 +91,12 @@ class OCRParser {
             let confidence = 0;
             try {
                 confidence = this.calculateOverallConfidence({
-                    amount,
-                    date,
-                    merchant: bestMerchant,
-                    paymentMethod,
-                    textLength: cleanText.length
-                });
+                amount,
+                date,
+                merchant: bestMerchant,
+                paymentMethod,
+                textLength: cleanText.length
+            });
             } catch (error) {
                 console.error('❌ 计算置信度失败:', error);
                 confidence = 0.1;
@@ -462,7 +462,7 @@ class OCRParser {
         // 验证日期
         if (parsedData.date) {
             try {
-                const date = new Date(parsedData.date);
+            const date = new Date(parsedData.date);
                 if (isNaN(date.getTime())) {
                     console.warn('⚠️ 日期格式无效:', parsedData.date);
                     parsedData.date = new Date().toISOString().split('T')[0];

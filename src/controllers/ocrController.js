@@ -32,8 +32,8 @@ class OCRController {
             let ocrRecord = null;
             try {
                 ocrRecord = await OCRRecord.create(userId, text, {
-                    status: 'processing'
-                });
+                status: 'processing'
+            });
                 
                 // 检查OCR记录是否成功创建
                 if (!ocrRecord || !ocrRecord.id) {
@@ -63,7 +63,7 @@ class OCRController {
                 if (!parseResult.success) {
                     // 标记为失败
                     try {
-                        await OCRRecord.markAsFailed(ocrRecord.id, userId, parseResult.error);
+                    await OCRRecord.markAsFailed(ocrRecord.id, userId, parseResult.error);
                     } catch (markError) {
                         console.error('❌ 标记OCR记录失败时出错:', markError);
                         // 继续执行，不中断响应
@@ -83,10 +83,10 @@ class OCRController {
                 let updatedRecord = null;
                 try {
                     updatedRecord = await OCRRecord.updateById(ocrRecord.id, userId, {
-                        parsedData: parseResult.data,
-                        confidenceScore: parseResult.data.overallConfidence,
-                        status: 'success'
-                    });
+                    parsedData: parseResult.data,
+                    confidenceScore: parseResult.data.overallConfidence,
+                    status: 'success'
+                });
                 } catch (updateError) {
                     console.error('❌ 更新OCR记录失败:', updateError);
                     // 继续执行，使用原始记录
@@ -122,7 +122,7 @@ class OCRController {
                 
                 // 标记为失败
                 try {
-                    await OCRRecord.markAsFailed(ocrRecord.id, userId, parseError.message);
+                await OCRRecord.markAsFailed(ocrRecord.id, userId, parseError.message);
                 } catch (markError) {
                     console.error('❌ 标记OCR记录失败时出错:', markError);
                     // 继续执行，不中断响应
@@ -178,8 +178,8 @@ class OCRController {
             let ocrRecord = null;
             try {
                 ocrRecord = await OCRRecord.create(userId, text, {
-                    status: 'processing'
-                });
+                status: 'processing'
+            });
                 
                 // 检查OCR记录是否成功创建
                 if (!ocrRecord || !ocrRecord.id) {
@@ -209,7 +209,7 @@ class OCRController {
                 if (!parseResult.success) {
                     // 标记为失败
                     try {
-                        await OCRRecord.markAsFailed(ocrRecord.id, userId, parseResult.error);
+                    await OCRRecord.markAsFailed(ocrRecord.id, userId, parseResult.error);
                     } catch (markError) {
                         console.error('❌ 标记OCR记录失败时出错:', markError);
                         // 继续执行，不中断响应
@@ -229,10 +229,10 @@ class OCRController {
                 let updatedRecord = null;
                 try {
                     updatedRecord = await OCRRecord.updateById(ocrRecord.id, userId, {
-                        parsedData: parseResult.data,
-                        confidenceScore: parseResult.data.overallConfidence,
-                        status: 'success'
-                    });
+                    parsedData: parseResult.data,
+                    confidenceScore: parseResult.data.overallConfidence,
+                    status: 'success'
+                });
                 } catch (updateError) {
                     console.error('❌ 更新OCR记录失败:', updateError);
                     // 继续执行，使用原始记录
@@ -266,7 +266,7 @@ class OCRController {
 
                         // 标记OCR记录为已确认
                         try {
-                            await OCRRecord.markAsConfirmed(ocrRecord.id, userId, expense.id);
+                        await OCRRecord.markAsConfirmed(ocrRecord.id, userId, expense.id);
                         } catch (markError) {
                             console.error('❌ 标记OCR记录已确认时出错:', markError);
                             // 继续执行，不中断响应
@@ -340,7 +340,7 @@ class OCRController {
                 
                 // 标记为失败
                 try {
-                    await OCRRecord.markAsFailed(ocrRecord.id, userId, parseError.message);
+                await OCRRecord.markAsFailed(ocrRecord.id, userId, parseError.message);
                 } catch (markError) {
                     console.error('❌ 标记OCR记录失败时出错:', markError);
                     // 继续执行，不中断响应
