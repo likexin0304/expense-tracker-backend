@@ -1358,13 +1358,317 @@ OCR自动识别功能可以自动解析账单文本，提取商户、金额、�
 - 🔄 结果确认流程：用户可以审核并修正解析结果
 - 📈 统计分析：提供OCR识别成功率和使用统计
 
-**工作流程:**
-1. 提交OCR文本 → 2. 系统解析 → 3. 用户确认 → 4. 创建支出记录
-
 **🆕 新增功能:**
 - ✅ 智能自动确认：高置信度时自动创建支出记录
 - ✅ iOS快捷指令生成：一键生成iOS快捷指令配置
 - ✅ URL路径验证：避免常见的路径重复错误
+
+### 📱 自动记账完整流程
+
+#### 方案1：智能自动创建（推荐）
+**适用场景**: 手机点击背后3次，自动截图并识别账单信息
+
+```
+用户操作 → 截图 → OCR识别 → 自动解析 → 高置信度自动创建支出记录
+```
+
+**API调用流程**:
+1. **直接调用自动解析API**: `POST /api/ocr/parse-auto`
+2. **根据响应处理结果**:
+   - 如果 `autoCreated: true` → 显示成功提示
+   - 如果 `autoCreated: false` → 跳转到确认页面
+
+**示例代码**:
+```swift
+// 1. 调用自动解析API
+let response = try await ocrService.parseTextAndAutoCreate(ocrText, threshold: 0.85)
+
+if response.data.autoCreated {
+    // 自动创建成功
+    showSuccessMessage("✅ 自动记账成功: \(response.data.expense.description) ¥\(response.data.expense.amount)")
+} else {
+    // 需要用户确认
+    showConfirmationView(recordId: response.data.recordId, parsedData: response.data.parsedData)
+}
+```
+
+#### 方案2：两步确认流程
+**适用场景**: 需要用户确认的场景
+
+```
+用户操作 → 截图 → OCR识别 → 解析结果 → 用户确认 → 创建支出记录
+```
+
+**API调用流程**:
+1. **解析OCR文本**: `POST /api/ocr/parse`
+2. **用户确认并创建**: `POST /api/ocr/confirm/:recordId`
+
+**示例代码**:
+```swift
+// 1. 解析OCR文本
+let parseResponse = try await ocrService.parseText(ocrText)
+let recordId = parseResponse.data.recordId
+
+// 2. 显示确认界面，用户修正后确认
+let corrections = getUserCorrections() // 用户修正的数据
+let expense = try await ocrService.confirmAndCreateExpense(recordId: recordId, corrections: corrections)
+
+showSuccessMessage("✅ 支出记录创建成功: \(expense.description)")
+```
+
+#### 核心API端点
+
+| API端点 | 用途 | 返回结果 |
+|---------|------|----------|
+| `POST /api/ocr/parse-auto` | 智能解析+自动创建 | 高置信度自动创建，低置信度返回解析结果 |
+| `POST /api/ocr/parse` | 基础解析 | 返回解析结果，需要用户确认 |
+| `POST /api/ocr/confirm/:recordId` | 确认并创建支出 | 创建支出记录 |
+
+#### 置信度阈值说明
+
+- **≥ 0.85**: 高置信度，建议自动创建
+- **0.6 - 0.84**: 中等置信度，建议用户确认
+- **< 0.6**: 低置信度，需要用户仔细检查
+
+### 🍎 iOS AutoExpenseService 完整实现
+
+#### 服务类定义
+```swift
+import Foundation
+
+class AutoExpenseService {
+    private let apiConfig = APIConfig()
+    
+    // MARK: - 主要方法
+    
+    /// 自动记账主流程 - 推荐用于"点击背后3次"功能
+    func processReceiptText(_ text: String, threshold: Double = 0.85) async throws -> AutoExpenseResult {
+        do {
+            // 调用自动解析API
+            let response = try await parseTextAndAutoCreate(text, threshold: threshold)
+            
+            if response.data.autoCreated {
+                // 自动创建成功
+                return .autoCreated(response.data.expense!)
+            } else {
+                // 需要用户确认
+                return .needsConfirmation(
+                    recordId: response.data.recordId!,
+                    parsedData: response.data.parsedData,
+                    confidence: response.data.confidence
+                )
+            }
+        } catch APIError.badRequest {
+            throw AutoExpenseError.configurationError
+        } catch APIError.unauthorized {
+            throw AutoExpenseError.authenticationRequired
+        } catch {
+            throw AutoExpenseError.processingFailed(error.localizedDescription)
+        }
+    }
+    
+    /// 确认并创建支出记录
+    func confirmAndCreateExpense(recordId: String, corrections: ExpenseCorrections) async throws -> Expense {
+        let url = "\(apiConfig.baseURL)/api/ocr/confirm/\(recordId)"
+        var request = URLRequest(url: URL(string: url)!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // 添加认证头部
+        if let token = UserDefaults.standard.string(forKey: "access_token") {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        // 构建请求体
+        let requestData: [String: Any] = [
+            "amount": corrections.amount,
+            "category": corrections.category,
+            "description": corrections.description,
+            "date": corrections.date?.iso8601String() ?? Date().iso8601String(),
+            "location": corrections.location ?? "",
+            "paymentMethod": corrections.paymentMethod ?? "cash",
+            "tags": corrections.tags ?? []
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestData)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              200...299 ~= httpResponse.statusCode else {
+            throw APIError.serverError((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+        
+        let responseModel = try JSONDecoder().decode(ExpenseResponse.self, from: data)
+        return responseModel.data.expense
+    }
+    
+    // MARK: - 私有方法
+    
+    private func parseTextAndAutoCreate(_ text: String, threshold: Double) async throws -> OCRAutoResponse {
+        let url = "\(apiConfig.baseURL)/api/ocr/parse-auto"
+        var request = URLRequest(url: URL(string: url)!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if let token = UserDefaults.standard.string(forKey: "access_token") {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let requestData: [String: Any] = [
+            "text": text,
+            "autoCreateThreshold": threshold
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestData)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+        
+        switch httpResponse.statusCode {
+        case 200...299:
+            return try JSONDecoder().decode(OCRAutoResponse.self, from: data)
+        case 400:
+            throw APIError.badRequest
+        case 401:
+            throw APIError.unauthorized
+        default:
+            throw APIError.serverError(httpResponse.statusCode)
+        }
+    }
+}
+
+// MARK: - 数据模型
+
+enum AutoExpenseResult {
+    case autoCreated(Expense)
+    case needsConfirmation(recordId: String, parsedData: ParsedData, confidence: Double)
+}
+
+enum AutoExpenseError: Error {
+    case configurationError
+    case authenticationRequired
+    case processingFailed(String)
+    
+    var description: String {
+        switch self {
+        case .configurationError:
+            return "API配置错误，请检查URL设置"
+        case .authenticationRequired:
+            return "需要重新登录"
+        case .processingFailed(let message):
+            return "处理失败: \(message)"
+        }
+    }
+}
+
+struct ExpenseCorrections {
+    let amount: Double
+    let category: String
+    let description: String
+    let date: Date?
+    let location: String?
+    let paymentMethod: String?
+    let tags: [String]?
+}
+
+// MARK: - 响应模型
+
+struct OCRAutoResponse: Codable {
+    let success: Bool
+    let message: String
+    let data: OCRAutoData
+}
+
+struct OCRAutoData: Codable {
+    let autoCreated: Bool
+    let expense: Expense?
+    let recordId: String?
+    let confidence: Double
+    let parsedData: ParsedData
+}
+
+struct ExpenseResponse: Codable {
+    let success: Bool
+    let message: String
+    let data: ExpenseData
+}
+
+struct ExpenseData: Codable {
+    let expense: Expense
+}
+```
+
+#### 使用示例
+```swift
+class ReceiptScanViewController: UIViewController {
+    private let autoExpenseService = AutoExpenseService()
+    
+    // 手机点击背后3次触发的方法
+    @objc func handleTripleTap() {
+        Task {
+            do {
+                // 1. 截图并进行OCR识别
+                let screenshot = takeScreenshot()
+                let ocrText = try await performOCR(on: screenshot)
+                
+                // 2. 处理OCR文本
+                let result = try await autoExpenseService.processReceiptText(ocrText)
+                
+                await MainActor.run {
+                    switch result {
+                    case .autoCreated(let expense):
+                        showAutoCreatedAlert(expense: expense)
+                    case .needsConfirmation(let recordId, let parsedData, let confidence):
+                        showConfirmationView(recordId: recordId, parsedData: parsedData, confidence: confidence)
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    showErrorAlert(error: error)
+                }
+            }
+        }
+    }
+    
+    private func showAutoCreatedAlert(expense: Expense) {
+        let alert = UIAlertController(
+            title: "✅ 自动记账成功",
+            message: "已自动创建支出记录：\(expense.description) ¥\(expense.amount)",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "确定", style: .default))
+        present(alert, animated: true)
+    }
+    
+    private func showConfirmationView(recordId: String, parsedData: ParsedData, confidence: Double) {
+        let confirmVC = ExpenseConfirmationViewController(
+            recordId: recordId,
+            parsedData: parsedData,
+            confidence: confidence,
+            onConfirm: { [weak self] corrections in
+                Task {
+                    do {
+                        let expense = try await self?.autoExpenseService.confirmAndCreateExpense(
+                            recordId: recordId,
+                            corrections: corrections
+                        )
+                        await MainActor.run {
+                            self?.showSuccessAlert(expense: expense!)
+                        }
+                    } catch {
+                        await MainActor.run {
+                            self?.showErrorAlert(error: error)
+                        }
+                    }
+                }
+            }
+        )
+        present(confirmVC, animated: true)
+    }
+}
+```
 
 ### 1. 解析OCR文本（基础版）
 
@@ -1513,17 +1817,33 @@ OCR自动识别功能可以自动解析账单文本，提取商户、金额、�
 
 确认OCR解析结果并创建支出记录。
 
+**请求头:**
+```
+Authorization: Bearer <token>
+```
+
+**路径参数:**
+- `recordId`: OCR记录ID（UUID格式）
+
 #### 请求参数
 ```json
 {
-  "confirmed": true,
-  "corrections": {
-    "amount": 26.00,
-    "category": "餐饮",
-    "description": "麦当劳午餐"
-  }
+  "amount": 26.00,
+  "category": "餐饮", 
+  "description": "麦当劳午餐",
+  "date": "2024-01-15T12:30:00.000Z",
+  "location": "北京市朝阳区",
+  "paymentMethod": "支付宝",
+  "tags": ["OCR识别", "午餐"]
 }
 ```
+
+> **注意**: 
+> - `amount`、`category`、`description` 为必填字段
+> - `date` 不提供时默认为当前时间
+> - `location` 可选，地点信息
+> - `paymentMethod` 默认为 "cash"
+> - `tags` 默认为空数组
 
 #### 成功响应 (201)
 ```json

@@ -122,6 +122,122 @@ curl -f https://nlrtjnvwgsaavtpfccxg.supabase.co/rest/v1/ || echo "项目可能�
 
 ---
 
+## 2025-10-15 - OCR自动记账功能完善和API文档更新
+
+### 📋 需求背景
+前端开发者反馈需要支持"手机点击背后3次，自动截图并识别图片中的账单信息，然后记录成一项支出记录"功能，但发现后端API缺失相关内容。
+
+### 🔍 问题排查结果
+
+#### ✅ 后端API状态检查
+经过详细检查，发现**后端API实际上是完整的**：
+
+1. **路由配置完整** ✅
+   - `POST /api/ocr/parse` - 基础OCR解析
+   - `POST /api/ocr/parse-auto` - 智能解析并自动创建
+   - `POST /api/ocr/confirm/:recordId` - 确认并创建支出记录
+   - 所有10个OCR相关端点都已正确配置
+
+2. **控制器实现完整** ✅
+   - `OCRController.parseText()` - 基础解析功能
+   - `OCRController.parseTextAndAutoCreate()` - 自动创建功能
+   - `OCRController.confirmAndCreateExpense()` - 确认创建功能
+   - 所有方法都有完整的错误处理和日志记录
+
+3. **生产环境部署正常** ✅
+   - 所有OCR API端点在生产环境中都可用
+   - API返回格式正确，功能正常
+
+### 📚 主要改进：API文档完善
+
+#### 1. 新增"自动记账完整流程"章节
+在 `docs/API.md` 中添加了详细的自动记账流程说明：
+
+**方案1：智能自动创建（推荐）**
+```
+用户操作 → 截图 → OCR识别 → 自动解析 → 高置信度自动创建支出记录
+```
+- 适用于"点击背后3次"功能
+- 使用 `POST /api/ocr/parse-auto` API
+- 置信度≥0.85时自动创建，否则需要用户确认
+
+**方案2：两步确认流程**
+```
+用户操作 → 截图 → OCR识别 → 解析结果 → 用户确认 → 创建支出记录
+```
+- 适用于需要用户确认的场景
+- 使用 `POST /api/ocr/parse` + `POST /api/ocr/confirm/:recordId`
+
+#### 2. 完善API端点文档
+更新了 `POST /api/ocr/confirm/:recordId` 的详细说明：
+- 添加了完整的请求参数说明
+- 明确了必填字段：`amount`、`category`、`description`
+- 提供了可选字段的默认值说明
+- 添加了认证头部要求
+
+#### 3. 新增iOS AutoExpenseService完整实现
+提供了完整的Swift代码示例：
+
+```swift
+class AutoExpenseService {
+    /// 自动记账主流程 - 推荐用于"点击背后3次"功能
+    func processReceiptText(_ text: String, threshold: Double = 0.85) async throws -> AutoExpenseResult
+    
+    /// 确认并创建支出记录
+    func confirmAndCreateExpense(recordId: String, corrections: ExpenseCorrections) async throws -> Expense
+}
+```
+
+包含：
+- 完整的服务类实现
+- 数据模型定义
+- 错误处理枚举
+- 使用示例代码
+- 手机点击背后3次的触发方法
+
+#### 4. 核心API端点对比表
+
+| API端点 | 用途 | 返回结果 |
+|---------|------|----------|
+| `POST /api/ocr/parse-auto` | 智能解析+自动创建 | 高置信度自动创建，低置信度返回解析结果 |
+| `POST /api/ocr/parse` | 基础解析 | 返回解析结果，需要用户确认 |
+| `POST /api/ocr/confirm/:recordId` | 确认并创建支出 | 创建支出记录 |
+
+#### 5. 置信度阈值说明
+- **≥ 0.85**: 高置信度，建议自动创建
+- **0.6 - 0.84**: 中等置信度，建议用户确认  
+- **< 0.6**: 低置信度，需要用户仔细检查
+
+### 🎯 解决方案总结
+
+**问题根因**: 不是后端API缺失，而是API文档不够详细，前端开发者不清楚如何使用现有API实现自动记账功能。
+
+**解决措施**:
+1. ✅ **完善API文档**: 添加了详细的自动记账流程说明
+2. ✅ **提供完整示例**: 包含Swift代码的完整实现
+3. ✅ **明确API用途**: 通过对比表清晰说明各API的用途
+4. ✅ **优化开发体验**: 提供了可直接使用的代码模板
+
+### 📱 前端集成指导
+
+前端开发者现在可以：
+
+1. **查看完整流程**: 了解两种自动记账方案的区别和适用场景
+2. **复制示例代码**: 直接使用提供的 `AutoExpenseService` 实现
+3. **理解API调用**: 通过详细的API文档了解请求格式和响应处理
+4. **处理错误情况**: 参考错误处理示例进行异常处理
+
+### 🔄 后续建议
+
+1. **前端实现**: 使用提供的 `AutoExpenseService` 实现自动记账功能
+2. **测试验证**: 在开发环境中测试完整的自动记账流程
+3. **用户体验优化**: 根据置信度阈值优化用户交互流程
+4. **错误处理**: 实现完善的错误提示和重试机制
+
+**文档更新完成时间**: 2025-10-15T09:00:00.000Z
+
+---
+
 ## 2025-06-28 修复OCR解析decodingError问题
 
 ### 🐛 问题描述
