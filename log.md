@@ -148,6 +148,30 @@ curl -f https://nlrtjnvwgsaavtpfccxg.supabase.co/rest/v1/ || echo "项目可能�
    - 所有OCR API端点在生产环境中都可用
    - API返回格式正确，功能正常
 
+### 🚀 部署状态更新
+
+#### 代码同步到GitHub
+- **提交哈希**: `9f9106e`
+- **提交时间**: 2025-10-15 17:43
+- **推送状态**: ✅ 成功推送到 `origin/main`
+- **文件变更**: 
+  - `docs/API.md`: +445行新增内容
+  - `log.md`: 更新项目日志
+
+#### Vercel生产环境部署
+- **部署状态**: ✅ 自动部署成功
+- **生产URL**: https://expense-tracker-backend-likexin0304s-projects.vercel.app
+- **健康检查**: ✅ 正常 (状态码: 200)
+- **API端点验证**: 
+  - OCR相关端点: ✅ 10个端点全部可用
+  - 确认创建API: ✅ `POST /api/ocr/confirm/:recordId` 正常
+  - 认证保护: ✅ 未认证请求正确返回401
+
+#### 前端开发者可用资源
+- **API文档**: `docs/API.md` 已更新完整的OCR自动记账流程
+- **Swift代码示例**: 包含完整的 `AutoExpenseService` 实现
+- **生产环境**: 所有API端点已部署并可正常使用
+
 ### 📚 主要改进：API文档完善
 
 #### 1. 新增"自动记账完整流程"章节
