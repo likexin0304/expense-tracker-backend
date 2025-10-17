@@ -1,7 +1,34 @@
 const OCRRecord = require('../models/OCRRecord');
 const Merchant = require('../models/Merchant');
-const Expense = require('../models/Expense');
+const { Expense } = require('../models/Expense');
 const OCRParser = require('../utils/ocrParser');
+
+// 分类映射：中文 -> 英文
+const CATEGORY_MAPPING = {
+    '餐饮': 'food',
+    '交通': 'transport',
+    '娱乐': 'entertainment',
+    '购物': 'shopping',
+    '账单': 'bills',
+    '医疗': 'healthcare',
+    '教育': 'education',
+    '旅行': 'travel',
+    '其他': 'other'
+};
+
+// 支付方式映射：中文 -> 英文
+const PAYMENT_METHOD_MAPPING = {
+    '现金': 'cash',
+    '银行卡': 'card',
+    '信用卡': 'card',
+    '借记卡': 'card',
+    '支付宝': 'online',
+    '微信支付': 'online',
+    '微信': 'online',
+    '网上支付': 'online',
+    '在线支付': 'online',
+    '其他': 'other'
+};
 
 /**
  * OCR控制器
@@ -253,16 +280,17 @@ class OCRController {
                     // 高置信度，自动创建支出记录
                     try {
                         const expenseData = {
-                            amount: parseResult.data.amount?.value || 0,
-                            category: parseResult.data.category?.value || '其他',
-                            description: parseResult.data.merchant?.name || parseResult.data.description || '自动识别记录',
-                            date: parseResult.data.date?.value || new Date().toISOString(),
+                            userId: userId,
+                            amount: parseResult.data.amount || 0,
+                            category: CATEGORY_MAPPING[parseResult.data.category] || 'other',
+                            description: parseResult.data.merchant || parseResult.data.description || '自动识别记录',
+                            date: parseResult.data.date || new Date().toISOString(),
                             location: parseResult.data.location || '',
-                            paymentMethod: parseResult.data.paymentMethod?.value || 'cash',
+                            paymentMethod: PAYMENT_METHOD_MAPPING[parseResult.data.paymentMethod] || 'cash',
                             tags: ['自动创建', 'OCR识别']
                         };
 
-                        const expense = await Expense.create(userId, expenseData);
+                        const expense = await Expense.create(expenseData);
 
                         // 标记OCR记录为已确认
                         try {
@@ -296,7 +324,7 @@ class OCRController {
                         });
 
                     } catch (expenseError) {
-                        console.error('❌ 自动创建支出记录失败:', expenseError);
+                        console.error('❌ 自动创建支出记录失败:', expenseError.message);
                         
                         // 自动创建失败，返回解析结果让用户手动确认
                         return res.status(200).json({
@@ -420,6 +448,7 @@ class OCRController {
 
             // 创建支出记录
             const expenseData = {
+                userId: userId,
                 amount: parseFloat(amount),
                 category,
                 description,
@@ -429,7 +458,7 @@ class OCRController {
                 tags: Array.isArray(tags) ? tags : []
             };
 
-            const expense = await Expense.create(userId, expenseData);
+            const expense = await Expense.create(expenseData);
 
             // 标记OCR记录为已确认
             await OCRRecord.markAsConfirmed(recordId, userId, expense.id);
