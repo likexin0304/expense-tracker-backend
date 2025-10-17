@@ -4058,4 +4058,63 @@ curl -X POST http://localhost:3000/api/api/ocr/parse \
 3. 测试前端集成效果
 4. 监控API使用情况
 
+## 2025-10-17 - 前端修复指南更新
+
+### 📱 前端开发者必读
+
+**问题**: 如果前端使用了错误的API URL，会导致OCR自动记账功能失败。
+
+**立即检查**: 你的前端代码中是否使用了这个错误的URL：
+```
+❌ https://expense-tracker-backend-mocrhvaay-likexin0304s-projects.vercel.app
+```
+
+**立即修复**: 更新为正确的URL：
+```
+✅ https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app
+```
+
+### 🛠️ 修复步骤
+
+1. **检查APIConfig文件**: 查找并更新baseURL
+2. **验证健康检查**: 测试 `/health` 端点
+3. **测试OCR功能**: 验证 `/api/ocr/parse-auto` 端点
+4. **实现动态配置**: 使用 `/api/config` 端点（推荐）
+
+### 📚 详细修复指南
+
+完整的前端修复代码和测试方法已更新到 `docs/API.md` 的"🚨 前端紧急修复指南"部分，包括：
+
+- ✅ **Swift代码示例**: 完整的APIConfig配置
+- ✅ **动态配置管理器**: APIConfigManager实现
+- ✅ **完整的测试套件**: APIConnectionTests类
+- ✅ **验证清单**: 逐步检查指南
+- ✅ **错误处理**: 详细的调试方法
+
+### 🎯 前端开发者行动清单
+
+**立即行动**:
+- [ ] 检查并更新APIConfig中的baseURL
+- [ ] 运行健康检查测试
+- [ ] 测试OCR自动记账功能
+- [ ] 验证所有API端点正常工作
+
+**推荐实现**:
+- [ ] 实现动态配置管理器
+- [ ] 添加API连接测试套件
+- [ ] 在应用启动时加载配置
+- [ ] 添加调试和监控功能
+
+### 📊 修复验证
+
+完成修复后，请验证以下项目：
+
+- [ ] ✅ 健康检查端点返回200状态码
+- [ ] ✅ OCR自动记账端点可以正常访问
+- [ ] ✅ 认证相关API正常工作
+- [ ] ✅ 前端不再出现"Cannot read properties of undefined"错误
+- [ ] ✅ "手机点击背后3次自动记账"功能正常工作
+
+**🚀 修复完成后，OCR自动记账功能将完全正常工作！**
+
 // ... existing code ...

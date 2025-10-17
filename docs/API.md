@@ -19,6 +19,37 @@
 **生产环境 URL:** `https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app`  
 **开发环境 URL:** `http://localhost:3000`
 
+### ⚠️ 重要：前端URL配置更新
+
+**问题**: 如果你的前端使用了错误的URL，会导致OCR自动记账功能失败。
+
+**错误URL（请立即更新）**: `https://expense-tracker-backend-mocrhvaay-likexin0304s-projects.vercel.app`  
+**正确URL**: `https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app`
+
+#### 🔧 前端立即修复步骤
+
+1. **检查并更新API配置**:
+   ```swift
+   // ❌ 如果你的代码中有这个URL，请立即更新
+   static let baseURL = "https://expense-tracker-backend-mocrhvaay-likexin0304s-projects.vercel.app"
+   
+   // ✅ 更新为正确的URL
+   static let baseURL = "https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app"
+   ```
+
+2. **验证修复**:
+   ```swift
+   // 测试健康检查端点
+   let testURL = "\(APIConfig.baseURL)/health"
+   // 应该返回: {"status":"OK",...}
+   ```
+
+3. **测试OCR自动记账功能**:
+   ```swift
+   // 确保OCR自动记账API正常工作
+   let ocrURL = "\(APIConfig.baseURL)/api/ocr/parse-auto"
+   ```
+
 ### 🔧 动态配置端点（推荐使用）
 
 为避免URL混淆问题，强烈推荐使用动态配置：
@@ -3127,6 +3158,304 @@ func createExpense(_ expense: ExpenseCreate) async throws -> Expense {
 2. 确保所有表都启用了行级安全策略(RLS)
 3. 使用适当的权限策略限制用户只能访问自己的数据
 4. 在后端API中验证所有用户输入 
+
+## 🚨 前端紧急修复指南
+
+### 📱 iOS客户端URL配置修复
+
+如果你的iOS应用在使用"手机点击背后3次自动记账"功能时出现错误，很可能是因为使用了错误的API URL。
+
+#### 🔍 问题检查
+
+1. **检查你的APIConfig文件**:
+   ```swift
+   // 查找你的APIConfig.swift或类似的配置文件
+   // 检查baseURL是否为错误的URL
+   ```
+
+2. **常见错误URL**:
+   ```swift
+   // ❌ 错误的URL（如果你在使用这个，请立即更新）
+   static let baseURL = "https://expense-tracker-backend-mocrhvaay-likexin0304s-projects.vercel.app"
+   ```
+
+3. **正确的URL**:
+   ```swift
+   // ✅ 正确的URL
+   static let baseURL = "https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app"
+   ```
+
+#### 🛠️ 修复步骤
+
+**步骤1: 更新API配置**
+```swift
+// 在你的APIConfig.swift文件中
+struct APIConfig {
+    // ✅ 使用正确的URL
+    static let baseURL = "https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app"
+    
+    enum Endpoint: String {
+        case health = "/health"
+        case authRegister = "/api/auth/register"
+        case authLogin = "/api/auth/login"
+        case ocrParse = "/api/ocr/parse"
+        case ocrParseAuto = "/api/ocr/parse-auto"
+        case ocrConfirm = "/api/ocr/confirm"
+        case expenseCreate = "/api/expense"
+        case budgetCurrent = "/api/budget/current"
+        
+        var fullURL: String {
+            return APIConfig.baseURL + self.rawValue
+        }
+    }
+}
+```
+
+**步骤2: 验证修复**
+```swift
+// 添加这个测试函数到你的代码中
+func testAPIConnection() async {
+    do {
+        let url = URL(string: "\(APIConfig.baseURL)/health")!
+        let (data, response) = try await URLSession.shared.data(from: url)
+        
+        if let httpResponse = response as? HTTPURLResponse,
+           httpResponse.statusCode == 200 {
+            print("✅ API连接正常")
+            
+            // 解析响应
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                print("📊 API响应: \(json)")
+            }
+        } else {
+            print("❌ API连接失败")
+        }
+    } catch {
+        print("❌ 网络错误: \(error.localizedDescription)")
+    }
+}
+```
+
+**步骤3: 测试OCR自动记账功能**
+```swift
+// 测试OCR自动记账端点
+func testOCRAutoCreate() async {
+    let testText = "测试 设置"
+    
+    do {
+        var request = URLRequest(url: URL(string: APIConfig.Endpoint.ocrParseAuto.fullURL)!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // 添加认证头部（如果有token）
+        if let token = UserDefaults.standard.string(forKey: "access_token") {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let requestData = [
+            "text": testText,
+            "autoCreateThreshold": 0.8
+        ] as [String: Any]
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestData)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        if let httpResponse = response as? HTTPURLResponse {
+            print("🔢 OCR API状态码: \(httpResponse.statusCode)")
+            
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("📥 OCR API响应: \(responseString)")
+            }
+            
+            if httpResponse.statusCode == 200 || httpResponse.statusCode == 201 {
+                print("✅ OCR自动记账API正常工作")
+            } else {
+                print("❌ OCR自动记账API返回错误")
+            }
+        }
+    } catch {
+        print("❌ OCR测试失败: \(error.localizedDescription)")
+    }
+}
+```
+
+#### 🔄 动态配置方案（推荐）
+
+为了避免将来再次出现URL混淆问题，建议实现动态配置：
+
+```swift
+// 动态配置管理器
+class APIConfigManager {
+    static let shared = APIConfigManager()
+    private var currentConfig: APIConfiguration?
+    
+    private init() {}
+    
+    // 从服务器获取最新配置
+    func loadConfiguration() async throws {
+        // 使用一个已知稳定的端点获取配置
+        let configURL = "https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app/api/config"
+        
+        guard let url = URL(string: configURL) else {
+            throw APIError.invalidURL
+        }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+        
+        let configResponse = try JSONDecoder().decode(ConfigResponse.self, from: data)
+        self.currentConfig = configResponse.data
+        
+        print("✅ 动态配置加载成功: \(configResponse.data.baseURL)")
+    }
+    
+    // 获取当前基础URL
+    func getBaseURL() -> String {
+        return currentConfig?.baseURL ?? "https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app"
+    }
+    
+    // 构建完整的API URL
+    func getAPIURL(for endpoint: String) -> String {
+        return getBaseURL() + endpoint
+    }
+}
+
+// 配置响应模型
+struct ConfigResponse: Codable {
+    let success: Bool
+    let data: APIConfiguration
+}
+
+struct APIConfiguration: Codable {
+    let baseURL: String
+    let environment: String
+    let version: String
+    let deploymentTimestamp: String
+}
+```
+
+#### 📱 在应用启动时加载配置
+
+```swift
+// 在AppDelegate或SceneDelegate中
+func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+    
+    // 异步加载API配置
+    Task {
+        do {
+            try await APIConfigManager.shared.loadConfiguration()
+            print("✅ API配置加载完成")
+        } catch {
+            print("⚠️ API配置加载失败，使用默认配置: \(error.localizedDescription)")
+        }
+    }
+    
+    return true
+}
+```
+
+#### 🧪 完整的测试套件
+
+```swift
+// 添加到你的测试代码中
+class APIConnectionTests {
+    
+    func runAllTests() async {
+        print("🧪 开始API连接测试...")
+        
+        await testHealthEndpoint()
+        await testOCREndpoint()
+        await testConfigEndpoint()
+        
+        print("🏁 API测试完成")
+    }
+    
+    private func testHealthEndpoint() async {
+        print("\n1️⃣ 测试健康检查端点...")
+        
+        do {
+            let url = URL(string: "\(APIConfigManager.shared.getBaseURL())/health")!
+            let (data, response) = try await URLSession.shared.data(from: url)
+            
+            if let httpResponse = response as? HTTPURLResponse,
+               httpResponse.statusCode == 200 {
+                print("✅ 健康检查通过")
+            } else {
+                print("❌ 健康检查失败")
+            }
+        } catch {
+            print("❌ 健康检查错误: \(error.localizedDescription)")
+        }
+    }
+    
+    private func testOCREndpoint() async {
+        print("\n2️⃣ 测试OCR端点...")
+        
+        // 这里添加OCR测试逻辑
+        let ocrURL = APIConfigManager.shared.getAPIURL(for: "/api/ocr/parse-auto")
+        print("📍 OCR URL: \(ocrURL)")
+        
+        // 如果有认证token，可以进行完整测试
+        if UserDefaults.standard.string(forKey: "access_token") != nil {
+            await testOCRAutoCreate()
+        } else {
+            print("⚠️ 无认证token，跳过OCR功能测试")
+        }
+    }
+    
+    private func testConfigEndpoint() async {
+        print("\n3️⃣ 测试配置端点...")
+        
+        do {
+            try await APIConfigManager.shared.loadConfiguration()
+            print("✅ 配置端点正常")
+        } catch {
+            print("⚠️ 配置端点暂不可用（可能仍在部署中）: \(error.localizedDescription)")
+        }
+    }
+}
+```
+
+#### 🚀 使用方法
+
+在你的ViewController中添加测试按钮：
+
+```swift
+class ViewController: UIViewController {
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        
+        // 添加测试按钮
+        let testButton = UIButton(type: .system)
+        testButton.setTitle("测试API连接", for: .normal)
+        testButton.addTarget(self, action: #selector(testAPIConnection), for: .touchUpInside)
+        // ... 设置约束和添加到视图
+    }
+    
+    @objc private func testAPIConnection() {
+        Task {
+            let tests = APIConnectionTests()
+            await tests.runAllTests()
+        }
+    }
+}
+```
+
+### ⚡ 快速验证清单
+
+完成修复后，请验证以下项目：
+
+- [ ] ✅ 健康检查端点返回200状态码
+- [ ] ✅ OCR自动记账端点可以正常访问
+- [ ] ✅ 认证相关API正常工作
+- [ ] ✅ 前端不再出现"Cannot read properties of undefined"错误
+- [ ] ✅ "手机点击背后3次自动记账"功能正常工作
 
 ## iOS客户端集成指南
 
