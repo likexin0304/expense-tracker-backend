@@ -1,7 +1,7 @@
 {
   "name": "expense-tracker-backend",
-  "version": "1.0.11",
-  "description": "费用追踪应用后端API - 强制Vercel部署 2025-06-23",
+  "version": "1.0.12",
+  "description": "费用追踪应用后端API - OCR自动记账Bug修复版本 2025-10-17",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
