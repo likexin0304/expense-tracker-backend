@@ -357,14 +357,15 @@ curl -X POST /api/ocr/parse-auto \
 
 ### 🔄 Vercel部署延迟问题
 
-#### ⏳ 当前状况 (2025-10-17 15:00)
+#### ⏳ 当前状况 (2025-10-17 15:10)
 - **问题**: 配置端点 `/api/config` 在生产环境中显示"路由不存在"
-- **原因**: Vercel部署延迟，还在使用旧版本代码
-- **已尝试**: 
-  - 版本号更新 (1.0.12 → 1.0.13)
-  - 添加FORCE_REBUILD环境变量
-  - 多次强制提交和推送
-- **状态**: 等待Vercel完成部署
+- **根本原因**: Vercel构建失败 - alias冲突
+- **具体错误**: `The chosen alias "expense-tracker-api.vercel.app" is already in use`
+- **已解决**: 
+  - ✅ 移除冲突的alias配置
+  - ✅ 版本号更新 (1.0.12 → 1.0.13)
+  - ✅ 添加FORCE_REBUILD环境变量
+- **状态**: 等待Vercel重新部署（alias冲突已解决）
 
 #### 🚀 立即解决方案
 由于部署延迟，提供了**不依赖配置端点的立即修复方案**：

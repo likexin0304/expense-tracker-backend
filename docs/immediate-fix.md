@@ -4,7 +4,8 @@
 
 - ❌ 错误URL: `https://expense-tracker-backend-mocrhvaay-likexin0304s-projects.vercel.app`
 - ✅ 正确URL: `https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app`
-- ⏳ 配置端点: `/api/config` 正在部署中
+- ⏳ 配置端点: `/api/config` 部署中（Vercel alias冲突已解决）
+- 🎯 **立即可用**: 下面的方案不依赖配置端点，可以立即使用
 
 ## 🚀 立即可用的Swift修复代码
 
