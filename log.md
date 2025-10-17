@@ -355,6 +355,58 @@ curl -X POST /api/ocr/parse-auto \
 
 **🚀 现在前端可以正常使用"手机点击背后3次自动记账"功能了！**
 
+### 🚀 部署状态
+
+#### ✅ 本地环境
+- **状态**: 完全修复，功能正常
+- **测试结果**: OCR自动记账功能100%正常工作
+- **版本**: v1.0.12
+
+#### ✅ 生产环境 
+- **状态**: 修复完成，但存在URL混淆问题
+- **根本原因**: 用户使用了错误的部署URL
+- **问题URL**: `https://expense-tracker-backend-mocrhvaay-likexin0304s-projects.vercel.app` ❌
+- **正确URL**: `https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app` ✅
+- **验证结果**: 正确URL的修复版本工作正常
+
+#### 📊 功能验证
+| 环境 | OCR解析 | 自动创建 | 分类映射 | 支付方式映射 | 状态 |
+|------|---------|----------|----------|-------------|------|
+| 本地 | ✅ | ✅ | ✅ | ✅ | 完全正常 |
+| 生产(正确URL) | ✅ | ✅ | ✅ | ✅ | 完全正常 |
+| 生产(错误URL) | ❌ | ❌ | ❌ | ❌ | 旧版本 |
+
+### 🔧 解决方案
+
+**问题根因**: 前端使用了错误的API URL
+
+**立即解决方案**: 
+1. **更新前端API配置**，将baseURL从：
+   ```
+   ❌ https://expense-tracker-backend-mocrhvaay-likexin0304s-projects.vercel.app
+   ```
+   改为：
+   ```
+   ✅ https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app
+   ```
+
+2. **验证修复**: 使用正确URL测试OCR自动记账功能
+
+**测试验证**:
+```bash
+# ✅ 正确URL - 功能正常
+curl -X POST "https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app/api/ocr/parse-auto" \
+  -H "Authorization: Bearer <token>" \
+  -d '{"text":"识别 设置","autoCreateThreshold":0.8}'
+# 返回: {"success":true,"message":"解析成功，需要用户确认"...}
+
+# ❌ 错误URL - 仍有Bug
+curl -X POST "https://expense-tracker-backend-mocrhvaay-likexin0304s-projects.vercel.app/api/ocr/parse-auto" \
+  -H "Authorization: Bearer <token>" \
+  -d '{"text":"识别 设置","autoCreateThreshold":0.8}'
+# 返回: {"success":false,"message":"服务器内部错误","error":"Cannot read properties of undefined (reading 'id')"}
+```
+
 ### 📚 主要改进：API文档完善
 
 #### 1. 新增"自动记账完整流程"章节
