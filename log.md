@@ -4117,4 +4117,187 @@ curl -X POST http://localhost:3000/api/api/ocr/parse \
 
 **🚀 修复完成后，OCR自动记账功能将完全正常工作！**
 
+## 2025-10-17 - OCR确认功能完善
+
+### 📋 需求分析
+
+前端团队提出需要增加OCR确认功能：
+- 用户在OCR识别后可以手动确认和修正结果
+- 确认后再创建支出记录
+- 需要完善的错误处理和响应格式
+
+### 🔍 现状检查
+
+检查了前端需求清单 `docs/后端API需求清单.md`，发现：
+
+#### ✅ 已实现的API
+1. `POST /api/ocr/parse-auto` - OCR自动解析API
+2. `POST /api/ocr/confirm/:recordId` - OCR确认并创建支出API
+
+#### ⚠️ 需要调整的部分
+1. **响应格式不匹配**: 前端期望的`parsedData`结构与当前实现不同
+2. **错误处理不完善**: 缺少详细的错误响应格式
+3. **字段命名不一致**: `paymentMethod.value` vs `paymentMethod.type`
+
+### 🛠️ 实施的改进
+
+#### 1. 响应格式标准化
+
+**修改前**:
+```json
+{
+  "data": {
+    "autoCreated": false,
+    "recordId": "uuid",
+    "parsedData": { /* 原始格式 */ },
+    "confidence": 0.65
+  }
+}
+```
+
+**修改后**:
+```json
+{
+  "data": {
+    "autoCreated": false,
+    "recordId": "uuid",
+    "expense": null,
+    "ocrRecord": {
+      "id": "uuid",
+      "originalText": "原始文本",
+      "parsedData": { /* 原始解析数据 */ },
+      "confidenceScore": 0.65,
+      "status": "success"
+    },
+    "parsedData": {
+      "amount": { "value": 25.80, "confidence": 0.98 },
+      "merchant": { "name": "麦当劳", "confidence": 0.95 },
+      "date": { "value": "2024-01-15", "confidence": 0.90 },
+      "category": { "name": "餐饮", "confidence": 0.85 },
+      "paymentMethod": { "type": "支付宝", "confidence": 0.92 },
+      "originalText": "原始文本"
+    },
+    "confidence": 0.65,
+    "suggestions": {
+      "shouldAutoCreate": false,
+      "needsReview": true,
+      "reason": "置信度 0.65 低于阈值 0.8"
+    }
+  }
+}
+```
+
+#### 2. 错误处理完善
+
+**场景1: recordId不存在 (404)**
+```json
+{
+  "success": false,
+  "message": "OCR记录不存在或已过期",
+  "error": "RECORD_NOT_FOUND"
+}
+```
+
+**场景2: 必填字段缺失 (400)**
+```json
+{
+  "success": false,
+  "message": "缺少必填字段",
+  "error": "VALIDATION_ERROR",
+  "details": {
+    "amount": "金额不能为空且必须大于0",
+    "category": "分类不能为空",
+    "description": "描述不能为空"
+  }
+}
+```
+
+**场景3: 记录已确认 (409)**
+```json
+{
+  "success": false,
+  "message": "该记录已被确认，不能重复确认",
+  "error": "RECORD_ALREADY_CONFIRMED"
+}
+```
+
+#### 3. 统一响应格式
+
+所有三种情况（自动创建成功、自动创建失败、置信度不够）都使用相同的响应结构：
+
+- ✅ `autoCreated`: boolean - 是否自动创建
+- ✅ `recordId`: string - OCR记录ID
+- ✅ `expense`: object | null - 支出记录（自动创建时）
+- ✅ `ocrRecord`: object - OCR记录详情
+- ✅ `parsedData`: object - 格式化的解析数据
+- ✅ `confidence`: number - 整体置信度
+- ✅ `suggestions`: object - 建议信息
+
+### 📚 文档更新
+
+#### 1. API.md新增内容
+
+- ✅ **OCR确认功能完整指南**: 详细的两步流程说明
+- ✅ **完整流程示例**: curl命令和响应示例
+- ✅ **Swift代码示例**: 前端集成代码
+- ✅ **错误响应格式**: 所有错误场景的详细说明
+- ✅ **数据模型定义**: 前端期望的ParsedData格式
+
+#### 2. 更新的API端点文档
+
+**`POST /api/ocr/parse-auto`**:
+- ✅ 自动创建成功响应 (201)
+- ✅ 需要确认响应 (200)
+- ✅ 解析失败响应 (400)
+
+**`POST /api/ocr/confirm/:recordId`**:
+- ✅ 成功创建响应 (201)
+- ✅ 记录不存在 (404)
+- ✅ 字段验证错误 (400)
+- ✅ 记录已确认 (409)
+
+### 🎯 功能验证
+
+#### 支持的识别字段
+1. **💰 金额** (权重40%) - 支持多种格式：¥25.80、25.80元、$25.80等
+2. **🏪 商户** (权重30%) - 智能匹配预置商户数据库
+3. **📅 日期** (权重20%) - 支持多种格式：2024-01-15、2024年1月15日等
+4. **💳 支付方式** (权重10%) - 支持：支付宝、微信支付、银行卡等
+5. **📂 分类** - 基于商户匹配或关键词推断
+
+#### 置信度机制
+- **≥ 0.8**: 自动创建支出记录
+- **0.6-0.79**: 需要用户确认
+- **< 0.6**: 需要仔细检查
+
+#### 分类和支付方式映射
+- **中文 → 英文**: 餐饮→food, 支付宝→online等
+- **完整映射**: 9个分类，6种支付方式
+
+### ✅ 完成状态
+
+#### 后端API
+- ✅ `POST /api/ocr/parse-auto` - 完全符合前端需求
+- ✅ `POST /api/ocr/confirm/:recordId` - 完全符合前端需求
+- ✅ 错误处理 - 所有场景覆盖
+- ✅ 响应格式 - 统一标准化
+
+#### 文档
+- ✅ API.md - 新增OCR确认功能完整指南
+- ✅ 流程示例 - 完整的curl和Swift代码
+- ✅ 数据模型 - 详细的TypeScript定义
+- ✅ 错误处理 - 所有错误场景说明
+
+### 🚀 前端集成
+
+前端现在可以：
+
+1. **调用解析API**: 获取OCR识别结果
+2. **判断是否需要确认**: 检查`autoCreated`字段
+3. **显示确认界面**: 使用`parsedData`预填充表单
+4. **提交确认**: 调用确认API创建支出记录
+5. **处理所有错误**: 根据错误码显示相应提示
+
+**🎉 OCR确认功能现在完全可用，前端无需任何额外的后端支持！**
+
 // ... existing code ...

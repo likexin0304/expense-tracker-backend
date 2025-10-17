@@ -307,19 +307,53 @@ class OCRController {
                             confidence: confidence
                         });
 
+                        // 转换为前端期望的格式
+                        const formattedParsedData = {
+                            amount: parseResult.data.amount ? {
+                                value: parseResult.data.amount,
+                                confidence: parseResult.data.amountConfidence || 0
+                            } : null,
+                            merchant: parseResult.data.merchant ? {
+                                name: parseResult.data.merchant,
+                                confidence: parseResult.data.merchantConfidence || 0
+                            } : null,
+                            date: {
+                                value: parseResult.data.date,
+                                confidence: parseResult.data.dateConfidence || 0
+                            },
+                            category: {
+                                name: parseResult.data.category,
+                                confidence: 0.8
+                            },
+                            paymentMethod: {
+                                type: parseResult.data.paymentMethod || '其他',
+                                confidence: parseResult.data.paymentMethodConfidence || 0
+                            },
+                            originalText: parseResult.data.originalText
+                        };
+
                         return res.status(201).json({
                             success: true,
                             message: '自动识别并创建支出记录成功',
                             data: {
                                 autoCreated: true,
+                                recordId: updatedRecord?.id || ocrRecord.id,
                                 expense: expense.toJSON(),
                                 ocrRecord: {
                                     id: updatedRecord?.id || ocrRecord.id,
+                                    originalText: parseResult.data.originalText,
+                                    parsedData: parseResult.data,
+                                    confidenceScore: confidence,
                                     status: 'confirmed',
                                     expenseId: expense.id
                                 },
+                                parsedData: formattedParsedData,
                                 confidence: confidence,
-                                parsedData: parseResult.data || {}
+                                suggestions: {
+                                    shouldAutoCreate: true,
+                                    needsReview: false,
+                                    reason: `置信度 ${confidence.toFixed(2)} 达到自动创建阈值`
+                                }
                             }
                         });
 
@@ -327,13 +361,45 @@ class OCRController {
                         console.error('❌ 自动创建支出记录失败:', expenseError.message);
                         
                         // 自动创建失败，返回解析结果让用户手动确认
+                        const formattedParsedData = {
+                            amount: parseResult.data.amount ? {
+                                value: parseResult.data.amount,
+                                confidence: parseResult.data.amountConfidence || 0
+                            } : null,
+                            merchant: parseResult.data.merchant ? {
+                                name: parseResult.data.merchant,
+                                confidence: parseResult.data.merchantConfidence || 0
+                            } : null,
+                            date: {
+                                value: parseResult.data.date,
+                                confidence: parseResult.data.dateConfidence || 0
+                            },
+                            category: {
+                                name: parseResult.data.category,
+                                confidence: 0.8
+                            },
+                            paymentMethod: {
+                                type: parseResult.data.paymentMethod || '其他',
+                                confidence: parseResult.data.paymentMethodConfidence || 0
+                            },
+                            originalText: parseResult.data.originalText
+                        };
+
                         return res.status(200).json({
                             success: true,
                             message: '解析成功，但自动创建失败，需要手动确认',
                             data: {
                                 autoCreated: false,
                                 recordId: updatedRecord?.id || ocrRecord.id,
-                                parsedData: parseResult.data || {},
+                                expense: null,
+                                ocrRecord: {
+                                    id: updatedRecord?.id || ocrRecord.id,
+                                    originalText: parseResult.data.originalText,
+                                    parsedData: parseResult.data,
+                                    confidenceScore: confidence,
+                                    status: 'success'
+                                },
+                                parsedData: formattedParsedData,
                                 confidence: confidence,
                                 error: expenseError.message || 'AUTO_CREATE_FAILED',
                                 suggestions: {
@@ -346,13 +412,46 @@ class OCRController {
                     }
                 } else {
                     // 置信度不够，需要用户确认
+                    // 转换为前端期望的格式
+                    const formattedParsedData = {
+                        amount: parseResult.data.amount ? {
+                            value: parseResult.data.amount,
+                            confidence: parseResult.data.amountConfidence || 0
+                        } : null,
+                        merchant: parseResult.data.merchant ? {
+                            name: parseResult.data.merchant,
+                            confidence: parseResult.data.merchantConfidence || 0
+                        } : null,
+                        date: {
+                            value: parseResult.data.date,
+                            confidence: parseResult.data.dateConfidence || 0
+                        },
+                        category: {
+                            name: parseResult.data.category,
+                            confidence: 0.8 // 基于推断的置信度
+                        },
+                        paymentMethod: {
+                            type: parseResult.data.paymentMethod || '其他',
+                            confidence: parseResult.data.paymentMethodConfidence || 0
+                        },
+                        originalText: parseResult.data.originalText
+                    };
+
                     return res.status(200).json({
                         success: true,
                         message: '解析成功，需要用户确认',
                         data: {
                             autoCreated: false,
                             recordId: updatedRecord?.id || ocrRecord.id,
-                            parsedData: parseResult.data || {},
+                            expense: null, // 未自动创建时为null
+                            ocrRecord: {
+                                id: updatedRecord?.id || ocrRecord.id,
+                                originalText: parseResult.data.originalText,
+                                parsedData: parseResult.data,
+                                confidenceScore: confidence,
+                                status: 'success'
+                            },
+                            parsedData: formattedParsedData,
                             confidence: confidence,
                             suggestions: {
                                 shouldAutoCreate: false,
@@ -420,29 +519,40 @@ class OCRController {
             if (!ocrRecord) {
                 return res.status(404).json({
                     success: false,
-                    message: 'OCR记录不存在'
+                    message: 'OCR记录不存在或已过期',
+                    error: 'RECORD_NOT_FOUND'
                 });
             }
 
             if (ocrRecord.status === 'confirmed') {
-                return res.status(400).json({
+                return res.status(409).json({
                     success: false,
-                    message: 'OCR记录已经被确认过了'
+                    message: '该记录已被确认，不能重复确认',
+                    error: 'RECORD_ALREADY_CONFIRMED'
                 });
             }
 
             // 验证必填字段
+            const validationErrors = {};
+            
             if (!amount || amount <= 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: '请输入有效的金额'
-                });
+                validationErrors.amount = '金额不能为空且必须大于0';
+            }
+            
+            if (!category) {
+                validationErrors.category = '分类不能为空';
+            }
+            
+            if (!description) {
+                validationErrors.description = '描述不能为空';
             }
 
-            if (!category || !description) {
+            if (Object.keys(validationErrors).length > 0) {
                 return res.status(400).json({
                     success: false,
-                    message: '分类和描述不能为空'
+                    message: '缺少必填字段',
+                    error: 'VALIDATION_ERROR',
+                    details: validationErrors
                 });
             }
 

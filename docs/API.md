@@ -1818,23 +1818,54 @@ class ReceiptScanViewController: UIViewController {
   "message": "自动识别并创建支出记录成功",
   "data": {
     "autoCreated": true,
+    "recordId": "ocr-uuid",
     "expense": {
       "id": "expense-uuid",
       "amount": 25.80,
-      "category": "餐饮",
+      "category": "food",
       "description": "麦当劳",
       "date": "2024-01-15",
-      "paymentMethod": "支付宝",
+      "paymentMethod": "online",
       "tags": ["自动创建", "OCR识别"],
       "createdAt": "2024-01-15T10:35:00Z"
     },
     "ocrRecord": {
       "id": "ocr-uuid",
+      "originalText": "麦当劳 2024-01-15 消费金额：¥25.80 支付方式：支付宝",
+      "parsedData": { /* 原始解析数据 */ },
+      "confidenceScore": 0.93,
       "status": "confirmed",
       "expenseId": "expense-uuid"
     },
+    "parsedData": {
+      "amount": {
+        "value": 25.80,
+        "confidence": 0.98
+      },
+      "merchant": {
+        "name": "麦当劳",
+        "confidence": 0.95
+      },
+      "date": {
+        "value": "2024-01-15",
+        "confidence": 0.90
+      },
+      "category": {
+        "name": "餐饮",
+        "confidence": 0.85
+      },
+      "paymentMethod": {
+        "type": "支付宝",
+        "confidence": 0.92
+      },
+      "originalText": "麦当劳 2024-01-15 消费金额：¥25.80 支付方式：支付宝"
+    },
     "confidence": 0.93,
-    "parsedData": { /* 完整解析结果 */ }
+    "suggestions": {
+      "shouldAutoCreate": true,
+      "needsReview": false,
+      "reason": "置信度 0.93 达到自动创建阈值"
+    }
   }
 }
 ```
@@ -1847,13 +1878,55 @@ class ReceiptScanViewController: UIViewController {
   "data": {
     "autoCreated": false,
     "recordId": "ocr-uuid",
-    "parsedData": { /* 解析结果 */ },
-    "confidence": 0.75,
+    "expense": null,
+    "ocrRecord": {
+      "id": "ocr-uuid",
+      "originalText": "识别的文本内容",
+      "parsedData": { /* 原始解析数据 */ },
+      "confidenceScore": 0.65,
+      "status": "success"
+    },
+    "parsedData": {
+      "amount": {
+        "value": 25.80,
+        "confidence": 0.70
+      },
+      "merchant": {
+        "name": "麦当劳",
+        "confidence": 0.60
+      },
+      "date": {
+        "value": "2024-01-15",
+        "confidence": 0.50
+      },
+      "category": {
+        "name": "餐饮",
+        "confidence": 0.80
+      },
+      "paymentMethod": {
+        "type": "支付宝",
+        "confidence": 0.70
+      },
+      "originalText": "识别的文本内容"
+    },
+    "confidence": 0.65,
     "suggestions": {
       "shouldAutoCreate": false,
-      "needsReview": false,
-      "reason": "置信度 0.75 低于阈值 0.85"
+      "needsReview": true,
+      "reason": "置信度 0.65 低于阈值 0.85"
     }
+  }
+}
+```
+
+#### 错误响应 - 文本解析失败 (400)
+```json
+{
+  "success": false,
+  "message": "文本解析失败",
+  "error": "PARSE_FAILED",
+  "data": {
+    "recordId": "ocr-uuid"
   }
 }
 ```
@@ -1876,20 +1949,21 @@ Authorization: Bearer <token>
 ```json
 {
   "amount": 26.00,
-  "category": "餐饮", 
+  "category": "food", 
   "description": "麦当劳午餐",
   "date": "2024-01-15T12:30:00.000Z",
   "location": "北京市朝阳区",
-  "paymentMethod": "支付宝",
+  "paymentMethod": "online",
   "tags": ["OCR识别", "午餐"]
 }
 ```
 
 > **注意**: 
 > - `amount`、`category`、`description` 为必填字段
+> - `category` 使用英文值：food, transport, entertainment, shopping, bills, healthcare, education, travel, other
+> - `paymentMethod` 使用英文值：cash, card, online, other
 > - `date` 不提供时默认为当前时间
 > - `location` 可选，地点信息
-> - `paymentMethod` 默认为 "cash"
 > - `tags` 默认为空数组
 
 #### 成功响应 (201)
@@ -1901,11 +1975,15 @@ Authorization: Bearer <token>
     "expense": {
       "id": "expense-uuid",
       "amount": 26.00,
-      "category": "餐饮",
+      "category": "food",
       "description": "麦当劳午餐",
       "date": "2024-01-15",
-      "paymentMethod": "支付宝",
-      "createdAt": "2024-01-15T10:35:00Z"
+      "paymentMethod": "online",
+      "location": "北京市朝阳区",
+      "tags": ["OCR识别", "午餐"],
+      "userId": "user-uuid",
+      "createdAt": "2024-01-15T10:35:00Z",
+      "updatedAt": "2024-01-15T10:35:00Z"
     },
     "ocrRecord": {
       "id": "ocr-uuid",
@@ -1913,6 +1991,38 @@ Authorization: Bearer <token>
       "expenseId": "expense-uuid"
     }
   }
+}
+```
+
+#### 错误响应 - 记录不存在 (404)
+```json
+{
+  "success": false,
+  "message": "OCR记录不存在或已过期",
+  "error": "RECORD_NOT_FOUND"
+}
+```
+
+#### 错误响应 - 必填字段缺失 (400)
+```json
+{
+  "success": false,
+  "message": "缺少必填字段",
+  "error": "VALIDATION_ERROR",
+  "details": {
+    "amount": "金额不能为空且必须大于0",
+    "category": "分类不能为空",
+    "description": "描述不能为空"
+  }
+}
+```
+
+#### 错误响应 - 记录已确认 (409)
+```json
+{
+  "success": false,
+  "message": "该记录已被确认，不能重复确认",
+  "error": "RECORD_ALREADY_CONFIRMED"
 }
 ```
 
@@ -2123,6 +2233,138 @@ Authorization: Bearer <token>
 }
 ```
 
+## 🎯 OCR确认功能完整指南
+
+### 📋 功能概述
+
+OCR确认功能允许用户在OCR自动识别后，手动确认和修正识别结果，然后创建支出记录。这是一个两步流程：
+
+1. **OCR解析**: `POST /api/ocr/parse-auto` - 解析文本，返回识别结果
+2. **用户确认**: `POST /api/ocr/confirm/:recordId` - 用户确认后创建支出记录
+
+### 🔄 完整流程示例
+
+#### 步骤1: OCR自动解析
+```bash
+curl -X POST /api/ocr/parse-auto \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "麦当劳 2024-01-15 消费金额：¥25.80 支付方式：支付宝",
+    "autoCreateThreshold": 0.8
+  }'
+```
+
+**响应（需要确认）**:
+```json
+{
+  "success": true,
+  "message": "解析成功，需要用户确认",
+  "data": {
+    "autoCreated": false,
+    "recordId": "abc-123-def",
+    "parsedData": {
+      "amount": { "value": 25.80, "confidence": 0.98 },
+      "merchant": { "name": "麦当劳", "confidence": 0.95 },
+      "category": { "name": "餐饮", "confidence": 0.85 },
+      "paymentMethod": { "type": "支付宝", "confidence": 0.92 }
+    },
+    "confidence": 0.75
+  }
+}
+```
+
+#### 步骤2: 用户确认并创建
+```bash
+curl -X POST /api/ocr/confirm/abc-123-def \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": 25.80,
+    "category": "food",
+    "description": "麦当劳午餐",
+    "date": "2024-01-15T12:30:00.000Z",
+    "paymentMethod": "online",
+    "tags": ["午餐"]
+  }'
+```
+
+**响应**:
+```json
+{
+  "success": true,
+  "message": "支出记录创建成功",
+  "data": {
+    "expense": {
+      "id": "expense-uuid",
+      "amount": 25.80,
+      "category": "food",
+      "description": "麦当劳午餐"
+    }
+  }
+}
+```
+
+### 🎨 前端集成建议
+
+#### Swift代码示例
+```swift
+class OCRConfirmationService {
+    
+    // 步骤1: 解析OCR文本
+    func parseOCRText(_ text: String) async throws -> OCRParseResult {
+        let url = "\(APIConfig.baseURL)/api/ocr/parse-auto"
+        var request = URLRequest(url: URL(string: url)!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        
+        let requestData = [
+            "text": text,
+            "autoCreateThreshold": 0.8
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestData)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let result = try JSONDecoder().decode(OCRParseResponse.self, from: data)
+        
+        if result.data.autoCreated {
+            return .autoCreated(result.data.expense!)
+        } else {
+            return .needsConfirmation(result.data.recordId!, result.data.parsedData)
+        }
+    }
+    
+    // 步骤2: 确认并创建支出
+    func confirmExpense(recordId: String, corrections: ExpenseData) async throws -> Expense {
+        let url = "\(APIConfig.baseURL)/api/ocr/confirm/\(recordId)"
+        var request = URLRequest(url: URL(string: url)!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        
+        let requestData = [
+            "amount": corrections.amount,
+            "category": corrections.category,
+            "description": corrections.description,
+            "date": corrections.date?.iso8601String(),
+            "paymentMethod": corrections.paymentMethod,
+            "tags": corrections.tags
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestData)
+        
+        let (data, _) = try await URLSession.shared.data(for: request)
+        let result = try JSONDecoder().decode(ExpenseResponse.self, from: data)
+        return result.data.expense
+    }
+}
+
+enum OCRParseResult {
+    case autoCreated(Expense)
+    case needsConfirmation(String, ParsedData)
+}
+```
+
 ### 📊 OCR数据模型
 
 #### OCRRecord (OCR记录)
@@ -2165,6 +2407,33 @@ Authorization: Bearer <token>
   expenseId?: string,
   createdAt: Date,
   updatedAt: Date
+}
+```
+
+#### 前端期望的ParsedData格式
+```typescript
+{
+  amount: {
+    value: number,
+    confidence: number
+  } | null,
+  merchant: {
+    name: string,
+    confidence: number
+  } | null,
+  date: {
+    value: string, // YYYY-MM-DD格式
+    confidence: number
+  },
+  category: {
+    name: string, // 中文分类名
+    confidence: number
+  },
+  paymentMethod: {
+    type: string, // 中文支付方式
+    confidence: number
+  },
+  originalText: string
 }
 ```
 
