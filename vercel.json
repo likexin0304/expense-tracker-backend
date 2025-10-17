@@ -16,6 +16,7 @@
     "expense-tracker-api.vercel.app"
   ],
   "env": {
-    "NODE_ENV": "production"
+    "NODE_ENV": "production",
+    "FORCE_REBUILD": "2025-10-17-config-endpoints"
   }
 } 
