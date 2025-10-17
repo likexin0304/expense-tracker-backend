@@ -355,6 +355,41 @@ curl -X POST /api/ocr/parse-auto \
 
 **🚀 现在前端可以正常使用"手机点击背后3次自动记账"功能了！**
 
+### 🔄 Vercel部署延迟问题
+
+#### ⏳ 当前状况 (2025-10-17 15:00)
+- **问题**: 配置端点 `/api/config` 在生产环境中显示"路由不存在"
+- **原因**: Vercel部署延迟，还在使用旧版本代码
+- **已尝试**: 
+  - 版本号更新 (1.0.12 → 1.0.13)
+  - 添加FORCE_REBUILD环境变量
+  - 多次强制提交和推送
+- **状态**: 等待Vercel完成部署
+
+#### 🚀 立即解决方案
+由于部署延迟，提供了**不依赖配置端点的立即修复方案**：
+
+1. **直接URL替换**:
+   ```swift
+   // ❌ 错误URL
+   static let baseURL = "https://expense-tracker-backend-mocrhvaay-likexin0304s-projects.vercel.app"
+   
+   // ✅ 正确URL  
+   static let baseURL = "https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app"
+   ```
+
+2. **智能URL检测**:
+   - 自动测试多个可能的URL
+   - 找到有效的API端点
+   - 提供完整的fallback机制
+
+3. **完整文档**: 详见 `docs/immediate-fix.md`
+
+#### 💡 经验总结
+- **Vercel部署**: 可能存在显著延迟，特别是路由变更
+- **应急方案**: 始终准备不依赖新功能的备用方案
+- **渐进升级**: 先解决紧急问题，再等待理想方案部署
+
 ### 🚀 部署状态
 
 #### ✅ 本地环境
