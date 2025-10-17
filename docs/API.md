@@ -16,8 +16,24 @@
 
 ## 基本信息
 
-**生产环境 URL:** `https://your-app-name.vercel.app` (待部署)  
+**生产环境 URL:** `https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app`  
 **开发环境 URL:** `http://localhost:3000`
+
+### 🔧 动态配置端点（推荐使用）
+
+为避免URL混淆问题，强烈推荐使用动态配置：
+
+**配置信息**: `GET /api/config`
+```bash
+curl https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app/api/config
+```
+
+**Swift代码**: `GET /api/config/swift`
+```bash
+curl https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app/api/config/swift
+```
+
+详细集成指南请参考: [前端配置指南](./frontend-config-guide.md)
 
 **内容类型:** `application/json`
 
@@ -3409,7 +3425,7 @@ static let baseURL = "https://your-domain.com/api"
 3. **使用完整的APIConfig.Endpoint：**
 ```swift
 enum APIConfig {
-    static let baseURL = "https://expense-tracker-backend-mocrhvaay-likexin0304s-projects.vercel.app"
+    static let baseURL = "https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app"
     
     enum Endpoint: String {
         case ocrParse = "/api/ocr/parse"

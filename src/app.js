@@ -13,6 +13,7 @@ const authRoutes = require('./routes/auth');
 const budgetRoutes = require('./routes/budget');
 const expenseRoutes = require('./routes/expense');
 const ocrRoutes = require('./routes/ocr');
+const configRoutes = require('./routes/config');
 
 const app = express();
 
@@ -117,6 +118,7 @@ app.use('/api/auth', authRoutes);      // 认证路由
 app.use('/api/budget', budgetRoutes);  // 预算路由
 app.use('/api/expense', expenseRoutes); // 支出路由（注意路径是/expense单数形式）
 app.use('/api/ocr', ocrRoutes);        // OCR自动识别路由
+app.use('/api/config', configRoutes);  // 配置路由
 
 // API文档路由
 app.get('/api/debug/routes', (req, res) => {
