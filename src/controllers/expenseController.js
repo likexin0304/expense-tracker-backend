@@ -1,4 +1,4 @@
-const { Expense } = require('../models/Expense');
+const { Expense, CATEGORIES, PAYMENT_METHODS } = require('../models/Expense');
 
 // 创建支出记录
 exports.createExpense = async (req, res) => {
@@ -356,8 +356,8 @@ exports.getCategories = async (req, res) => {
   try {
     console.log('📋 获取支出分类列表');
 
-    // 从Expense模型导入分类列表
-    const categories = require('../models/Expense').CATEGORIES;
+    // 使用已导入的分类列表
+    const categories = CATEGORIES;
 
     const categoriesWithInfo = [
       { value: 'food', label: '餐饮', icon: '🍽️' },

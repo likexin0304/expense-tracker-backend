@@ -568,6 +568,12 @@ class OCRController {
                 tags: Array.isArray(tags) ? tags : []
             };
 
+            console.log('🔍 调试信息 - confirmAndCreateExpense:', {
+                Expense: typeof Expense,
+                ExpenseCreate: typeof Expense.create,
+                expenseData
+            });
+            
             const expense = await Expense.create(expenseData);
 
             // 标记OCR记录为已确认
