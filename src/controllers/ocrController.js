@@ -291,7 +291,30 @@ class OCRController {
                             tags: ['自动创建', 'OCR识别']
                         };
 
-                        const expense = await Expense.create(expenseData);
+                        // 直接使用Supabase创建支出记录（自动创建路径）
+                        const { supabaseAdmin } = require('../utils/supabase');
+                        const { data: autoExpenseRecord, error: autoInsertError } = await supabaseAdmin
+                            .from('expenses')
+                            .insert({
+                                user_id: expenseData.userId,
+                                amount: parseFloat(expenseData.amount),
+                                category: expenseData.category,
+                                description: expenseData.description,
+                                date: expenseData.date,
+                                location: expenseData.location,
+                                payment_method: expenseData.paymentMethod,
+                                is_recurring: false,
+                                tags: expenseData.tags || [],
+                                notes: ''
+                            })
+                            .select()
+                            .single();
+
+                        if (autoInsertError) {
+                            throw new Error(`自动创建支出记录失败: ${autoInsertError.message}`);
+                        }
+
+                        const expense = new Expense(autoExpenseRecord);
 
                         // 标记OCR记录为已确认
                         try {
