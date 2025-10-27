@@ -579,7 +579,22 @@ class OCRController {
                 expenseData
             });
             
-            const expense = await Expense.create(expenseData);
+            // 尝试直接调用create方法
+            let expense;
+            try {
+                if (typeof Expense?.create === 'function') {
+                    expense = await Expense.create(expenseData);
+                } else if (typeof ExpenseModule?.Expense?.create === 'function') {
+                    expense = await ExpenseModule.Expense.create(expenseData);
+                } else {
+                    // 最后的备用方案：重新导入模块
+                    const FreshExpenseModule = require('../models/Expense');
+                    expense = await FreshExpenseModule.Expense.create(expenseData);
+                }
+            } catch (error) {
+                console.error('❌ Expense.create调用失败:', error);
+                throw new Error(`Expense.create调用失败: ${error.message}`);
+            }
 
             // 标记OCR记录为已确认
             await OCRRecord.markAsConfirmed(recordId, userId, expense.id);
