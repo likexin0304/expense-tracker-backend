@@ -579,22 +579,45 @@ class OCRController {
                 expenseData
             });
             
-            // 尝试直接调用create方法
-            let expense;
-            try {
-                if (typeof Expense?.create === 'function') {
-                    expense = await Expense.create(expenseData);
-                } else if (typeof ExpenseModule?.Expense?.create === 'function') {
-                    expense = await ExpenseModule.Expense.create(expenseData);
-                } else {
-                    // 最后的备用方案：重新导入模块
-                    const FreshExpenseModule = require('../models/Expense');
-                    expense = await FreshExpenseModule.Expense.create(expenseData);
-                }
-            } catch (error) {
-                console.error('❌ Expense.create调用失败:', error);
-                throw new Error(`Expense.create调用失败: ${error.message}`);
+            // 直接使用Supabase创建支出记录，绕过Expense模型的静态方法
+            const { supabaseAdmin } = require('../utils/supabase');
+            
+            // 验证数据
+            if (!expenseData.amount || expenseData.amount <= 0) {
+                throw new Error('支出金额必须大于0');
             }
+            
+            // 直接插入数据库
+            const { data: expenseRecord, error: insertError } = await supabaseAdmin
+                .from('expenses')
+                .insert({
+                    user_id: expenseData.userId,
+                    amount: parseFloat(expenseData.amount),
+                    category: expenseData.category,
+                    description: expenseData.description,
+                    date: expenseData.date,
+                    location: expenseData.location,
+                    payment_method: expenseData.paymentMethod,
+                    is_recurring: expenseData.isRecurring || false,
+                    tags: expenseData.tags || [],
+                    notes: expenseData.notes || ''
+                })
+                .select()
+                .single();
+
+            if (insertError) {
+                console.error('❌ 数据库插入失败:', insertError);
+                throw new Error(`创建支出记录失败: ${insertError.message}`);
+            }
+
+            // 创建Expense对象实例
+            const expense = new Expense(expenseRecord);
+            
+            console.log('✅ 直接创建支出记录成功:', {
+                id: expense.id,
+                amount: expense.amount,
+                method: 'direct_supabase_insert'
+            });
 
             // 标记OCR记录为已确认
             await OCRRecord.markAsConfirmed(recordId, userId, expense.id);
