@@ -1,6 +1,7 @@
 const OCRRecord = require('../models/OCRRecord');
 const Merchant = require('../models/Merchant');
-const { Expense } = require('../models/Expense');
+const ExpenseModule = require('../models/Expense');
+const Expense = ExpenseModule.Expense;
 const OCRParser = require('../utils/ocrParser');
 
 // 分类映射：中文 -> 英文
@@ -569,8 +570,12 @@ class OCRController {
             };
 
             console.log('🔍 调试信息 - confirmAndCreateExpense:', {
+                ExpenseModule: typeof ExpenseModule,
+                ExpenseModuleKeys: Object.keys(ExpenseModule),
                 Expense: typeof Expense,
-                ExpenseCreate: typeof Expense.create,
+                ExpenseCreate: typeof Expense?.create,
+                ExpensePrototype: Object.getOwnPropertyNames(Expense?.prototype || {}),
+                ExpenseStatic: Object.getOwnPropertyNames(Expense || {}),
                 expenseData
             });
             
