@@ -10,11 +10,23 @@ const CATEGORY_MAPPING = {
     '交通': 'transport',
     '娱乐': 'entertainment',
     '购物': 'shopping',
+    '服装': 'shopping',  // 添加服装映射
+    '衣服': 'shopping',
     '账单': 'bills',
     '医疗': 'healthcare',
     '教育': 'education',
     '旅行': 'travel',
-    '其他': 'other'
+    '其他': 'other',
+    // 支持英文直接通过
+    'food': 'food',
+    'transport': 'transport',
+    'entertainment': 'entertainment',
+    'shopping': 'shopping',
+    'bills': 'bills',
+    'healthcare': 'healthcare',
+    'education': 'education',
+    'travel': 'travel',
+    'other': 'other'
 };
 
 // 支付方式映射：中文 -> 英文
@@ -28,7 +40,12 @@ const PAYMENT_METHOD_MAPPING = {
     '微信': 'online',
     '网上支付': 'online',
     '在线支付': 'online',
-    '其他': 'other'
+    '其他': 'other',
+    // 支持英文直接通过
+    'cash': 'cash',
+    'card': 'card',
+    'online': 'online',
+    'other': 'other'
 };
 
 /**
@@ -580,15 +597,26 @@ class OCRController {
                 });
             }
 
+            // 转换中文分类和支付方式为英文
+            const mappedCategory = CATEGORY_MAPPING[category] || category || 'other';
+            const mappedPaymentMethod = PAYMENT_METHOD_MAPPING[paymentMethod] || paymentMethod || 'cash';
+            
+            console.log('🔄 字段映射转换:', {
+                原始category: category,
+                映射后category: mappedCategory,
+                原始paymentMethod: paymentMethod,
+                映射后paymentMethod: mappedPaymentMethod
+            });
+
             // 创建支出记录
             const expenseData = {
                 userId: userId,
                 amount: parseFloat(amount),
-                category,
+                category: mappedCategory,
                 description,
                 date: date || new Date().toISOString(),
                 location: location || '',
-                paymentMethod: paymentMethod || 'cash',
+                paymentMethod: mappedPaymentMethod,
                 tags: Array.isArray(tags) ? tags : []
             };
 
