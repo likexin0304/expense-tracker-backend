@@ -25,8 +25,9 @@ console.log('🚀 正在启动服务器...');
 app.listen(PORT, () => {
     console.log('✅ 服务器配置完成');
     console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📝 Version: 1.0.13 - 配置端点自动化版本`);
+    console.log(`📝 Version: 1.0.14 - OCR确认功能修复版本`);
     console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`⚡ Force deployment: ${new Date().toISOString()}`);
+    console.log(`🔄 Cache bust: ${Date.now()}`);
     console.log(`🔧 Vercel config: builds+routes (fixed)`);
 }); 

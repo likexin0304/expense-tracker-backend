@@ -1,6 +1,6 @@
 {
   "name": "expense-tracker-backend",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "费用追踪应用后端API - OCR自动记账Bug修复版本 2025-10-17",
   "main": "server.js",
   "scripts": {
