@@ -2233,7 +2233,184 @@ Authorization: Bearer <token>
 }
 ```
 
-## 🎯 OCR确认功能完整指南
+## 🚀 OCR确认功能 - 推荐方案（绕过Vercel缓存问题）
+
+### ⚡ 快速解决方案
+
+**如果遇到 `Expense.create is not a function` 错误**，建议使用以下方案：
+
+**不使用** `POST /api/ocr/confirm/:recordId`，而是**直接调用创建支出API**：
+
+```
+OCR解析 → 展示确认弹窗 → 直接调用 POST /api/expense
+```
+
+### 📝 实现步骤
+
+#### 步骤1: OCR解析（不变）
+```bash
+POST /api/ocr/parse-auto
+```
+
+#### 步骤2: 用户确认后直接创建支出（推荐）
+```bash
+POST /api/expense
+Content-Type: application/json
+Authorization: Bearer <token>
+
+{
+  "amount": 25.80,
+  "category": "food",         // 或中文"餐饮"（自动映射）
+  "description": "麦当劳午餐",
+  "date": "2024-01-15T12:30:00.000Z",
+  "paymentMethod": "online",  // 或中文"支付宝"（自动映射）
+  "tags": ["OCR识别", "午餐"]
+}
+```
+
+**响应**:
+```json
+{
+  "success": true,
+  "message": "支出记录创建成功",
+  "data": {
+    "expense": {
+      "id": "expense-uuid",
+      "amount": 25.80,
+      "category": "food",
+      "description": "麦当劳午餐"
+    }
+  }
+}
+```
+
+### 🎨 Swift代码示例（推荐方案）
+
+```swift
+class OCRConfirmationService {
+    
+    // 步骤1: 解析OCR文本
+    func parseOCRText(_ text: String) async throws -> OCRParseResult {
+        let url = "\(APIConfig.baseURL)/api/ocr/parse-auto"
+        var request = URLRequest(url: URL(string: url)!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        
+        let requestData = [
+            "text": text,
+            "autoCreateThreshold": 0.8
+        ] as [String : Any]
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestData)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let result = try JSONDecoder().decode(OCRParseResponse.self, from: data)
+        
+        if result.data.autoCreated {
+            // 已自动创建，直接返回
+            return .autoCreated(result.data.expense!)
+        } else {
+            // 需要用户确认，返回解析数据
+            return .needsConfirmation(result.data.parsedData)
+        }
+    }
+    
+    // 步骤2: 用户确认后直接创建支出（推荐方案）
+    func createExpenseDirectly(
+        amount: Double,
+        category: String,
+        description: String,
+        date: Date,
+        paymentMethod: String,
+        tags: [String] = []
+    ) async throws -> Expense {
+        // 直接调用创建支出API
+        let url = "\(APIConfig.baseURL)/api/expense"  // 注意：不是 /api/ocr/confirm
+        var request = URLRequest(url: URL(string: url)!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        
+        let requestData: [String: Any] = [
+            "amount": amount,
+            "category": category,  // 支持中文或英文
+            "description": description,
+            "date": ISO8601DateFormatter().string(from: date),
+            "paymentMethod": paymentMethod,  // 支持中文或英文
+            "tags": tags
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestData)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 201 else {
+            throw APIError.serverError
+        }
+        
+        let result = try JSONDecoder().decode(ExpenseCreateResponse.self, from: data)
+        return result.data.expense
+    }
+}
+
+// 使用示例
+func handleOCRConfirmation(parsedData: ParsedData) {
+    // 显示确认弹窗，让用户编辑
+    showConfirmationSheet(parsedData) { confirmedData in
+        Task {
+            do {
+                // 直接创建支出，不经过OCR确认API
+                let expense = try await createExpenseDirectly(
+                    amount: confirmedData.amount,
+                    category: confirmedData.category,  // 可以使用中文"餐饮"
+                    description: confirmedData.description,
+                    date: confirmedData.date,
+                    paymentMethod: confirmedData.paymentMethod,  // 可以使用中文"支付宝"
+                    tags: ["OCR识别"]
+                )
+                
+                print("✅ 支出创建成功: \(expense.id)")
+                // 更新UI
+            } catch {
+                print("❌ 创建失败: \(error)")
+            }
+        }
+    }
+}
+```
+
+### ✅ 推荐方案的优势
+
+1. **立即可用** - 不需要等待Vercel缓存清除
+2. **API稳定** - `/api/expense` 是已验证的稳定API
+3. **逻辑清晰** - 用户确认后就是普通的新增支出
+4. **支持中文** - category和paymentMethod自动映射
+5. **改动最小** - 只需修改API端点
+
+### 🔄 中文字段自动映射
+
+后端已支持中文字段自动转换为英文：
+
+**Category映射**:
+- 餐饮 → food
+- 交通 → transport
+- 娱乐 → entertainment
+- 购物/服装 → shopping
+- 账单 → bills
+- 医疗 → healthcare
+- 教育 → education
+- 旅行 → travel
+- 其他 → other
+
+**PaymentMethod映射**:
+- 现金 → cash
+- 银行卡/信用卡 → card
+- 支付宝/微信支付 → online
+- 其他 → other
+
+---
+
+## 🎯 OCR确认功能完整指南（原方案）
 
 ### 📋 功能概述
 
@@ -2241,6 +2418,8 @@ OCR确认功能允许用户在OCR自动识别后，手动确认和修正识别�
 
 1. **OCR解析**: `POST /api/ocr/parse-auto` - 解析文本，返回识别结果
 2. **用户确认**: `POST /api/ocr/confirm/:recordId` - 用户确认后创建支出记录
+
+**⚠️ 注意**: 如果遇到 `Expense.create is not a function` 错误，请使用上面的推荐方案
 
 ### 🔄 完整流程示例
 
