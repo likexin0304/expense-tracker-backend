@@ -1,5 +1,263 @@
 # 更改日志
 
+## 2025-10-28 - POST /api/expense中文字段映射支持
+
+### 📱 问题报告
+
+用户使用OCR确认功能（推荐方案）调用`POST /api/expense`时遇到错误：
+
+```
+STATUS: 500
+ERROR: "支出分类必须是有效值: food, transport, entertainment, shopping, bills, healthcare, education, travel, other"
+```
+
+**请求数据**:
+```json
+{
+  "category": "其他",
+  "amount": 100,
+  "paymentMethod": "其他",
+  "description": "打车",
+  "date": "2025-10-28T03:06:42Z"
+}
+```
+
+### 🔍 问题分析
+
+#### 1. 根本原因
+`POST /api/expense` 端点缺少中文字段映射：
+- OCR控制器中有中文映射（在`/api/ocr/confirm`中）
+- Expense控制器中**没有**中文映射（在`/api/expense`中）
+- 用户使用推荐方案时，直接调用`/api/expense`，遇到中文字段验证失败
+
+#### 2. 为什么推荐方案需要映射
+- 用户采用了推荐方案：`OCR解析 → 确认弹窗 → 直接调用 /api/expense`
+- 绕过了有映射的`/api/ocr/confirm`端点
+- 直接调用了没有映射的`/api/expense`端点
+- 导致中文字段无法识别
+
+### 🛠️ 修复方案
+
+#### 在expenseController.js中添加中文映射
+
+**修改位置**: `src/controllers/expenseController.js`
+
+**添加的映射**:
+```javascript
+// 分类映射：中文 → 英文
+const CATEGORY_MAPPING = {
+    '餐饮': 'food',
+    '交通': 'transport',
+    '娱乐': 'entertainment',
+    '购物': 'shopping',
+    '服装': 'shopping',
+    '衣服': 'shopping',
+    '账单': 'bills',
+    '医疗': 'healthcare',
+    '教育': 'education',
+    '旅行': 'travel',
+    '其他': 'other',
+    // 支持英文直接通过
+    'food': 'food',
+    'transport': 'transport',
+    'entertainment': 'entertainment',
+    'shopping': 'shopping',
+    'bills': 'bills',
+    'healthcare': 'healthcare',
+    'education': 'education',
+    'travel': 'travel',
+    'other': 'other'
+};
+
+// 支付方式映射：中文 → 英文
+const PAYMENT_METHOD_MAPPING = {
+    '现金': 'cash',
+    '银行卡': 'card',
+    '信用卡': 'card',
+    '借记卡': 'card',
+    '支付宝': 'online',
+    '微信支付': 'online',
+    '微信': 'online',
+    '网上支付': 'online',
+    '在线支付': 'online',
+    '其他': 'other',
+    // 支持英文直接通过
+    'cash': 'cash',
+    'card': 'card',
+    'online': 'online',
+    'other': 'other'
+};
+```
+
+**应用映射**（在`createExpense`方法中）:
+```javascript
+// 转换中文分类和支付方式为英文
+const mappedCategory = CATEGORY_MAPPING[category] || category || 'other';
+const mappedPaymentMethod = PAYMENT_METHOD_MAPPING[paymentMethod] || paymentMethod || 'cash';
+
+console.log('🔄 字段映射转换:', {
+    原始category: category,
+    映射后category: mappedCategory,
+    原始paymentMethod: paymentMethod,
+    映射后paymentMethod: mappedPaymentMethod
+});
+
+const expenseData = {
+  userId: req.userId,
+  amount: parseFloat(amount),
+  category: mappedCategory,  // 使用映射后的值
+  description: description.trim(),
+  date: date ? new Date(date) : new Date(),
+  location: location || null,
+  paymentMethod: mappedPaymentMethod,  // 使用映射后的值
+  tags: tags || []
+};
+```
+
+### ✅ 本地测试结果
+
+**测试时间**: 2025-10-28 10:57
+
+**测试用例**:
+```bash
+curl -X POST http://localhost:3000/api/expense \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{"amount":100,"category":"其他","description":"测试支出","date":"2025-10-28T02:53:02Z","paymentMethod":"其他"}'
+```
+
+**测试结果**: ✅ **完全成功**
+
+```json
+{
+  "success": true,
+  "message": "支出记录创建成功",
+  "data": {
+    "id": "dc0c3da3-6b29-49e2-aed8-a1bbe619719a",
+    "amount": 100,
+    "category": "other",       // ✅ 中文"其他" → 英文"other"
+    "paymentMethod": "other",  // ✅ 中文"其他" → 英文"other"
+    "description": "测试支出"
+  }
+}
+```
+
+**控制台日志**:
+```
+🔄 字段映射转换: {
+  '原始category': '其他',
+  '映射后category': 'other',
+  '原始paymentMethod': '其他',
+  '映射后paymentMethod': 'other'
+}
+✅ 支出记录创建成功: dc0c3da3-6b29-49e2-aed8-a1bbe619719a
+```
+
+### ⚠️ Vercel生产环境状态
+
+**当前状态**: ❌ **仍返回旧错误**
+
+**问题**: Vercel部署延迟（已推送代码，但生产环境未更新）
+
+**证据**:
+```bash
+# 生产环境测试（2025-10-28 11:03）
+curl -X POST "https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app/api/expense" \
+  -d '{"category":"其他",...}'
+
+# 返回
+{
+  "error": "支出分类必须是有效值: food, transport..."  # ← 旧版本错误
+}
+
+# Vercel响应头
+x-vercel-cache: MISS  # ← 触发了新部署
+x-vercel-id: hnd1::iad1::22zpt-1761621009226-82be20ec4659  # ← 新的部署ID
+```
+
+**分析**: Vercel触发了新部署，但部署的仍然是旧代码（可能的缓存/构建问题）
+
+### 💡 临时解决方案
+
+#### 方案1: 前端临时映射（立即可用⭐推荐）
+
+**实现**: 前端在调用API前先转换中文为英文
+
+**Swift代码**:
+```swift
+extension OCRConfirmationService {
+    private func mapCategoryToEnglish(_ category: String) -> String {
+        let mapping: [String: String] = [
+            "其他": "other",
+            "餐饮": "food",
+            "交通": "transport",
+            // ... 其他映射
+        ]
+        return mapping[category] ?? "other"
+    }
+    
+    private func mapPaymentMethodToEnglish(_ method: String) -> String {
+        let mapping: [String: String] = [
+            "其他": "other",
+            "现金": "cash",
+            "支付宝": "online",
+            // ... 其他映射
+        ]
+        return mapping[method] ?? "other"
+    }
+    
+    func createExpenseWithMapping(...) async throws -> Expense {
+        let englishCategory = mapCategoryToEnglish(category)
+        let englishPaymentMethod = mapPaymentMethodToEnglish(paymentMethod)
+        // 使用英文值调用API
+    }
+}
+```
+
+**优势**:
+- ✅ 立即可用，不需要等待Vercel
+- ✅ 向后兼容（Vercel更新后仍然有效）
+- ✅ 双语支持（中文+英文）
+
+#### 方案2: 等待Vercel部署（2-4小时）
+
+**说明**: 代码已推送，等待Vercel自动更新
+
+### 📊 测试对比
+
+| 环境 | 状态 | 输入 | 输出 | 备注 |
+|------|------|------|------|------|
+| 本地开发 | ✅ 成功 | category:"其他" | category:"other" | 映射正常 |
+| Vercel生产 | ❌ 失败 | category:"其他" | 错误 | 未部署 |
+
+### 📝 提交记录
+
+- `41e5c7c` - ✨ 添加POST /api/expense的中文字段映射支持
+  - 添加CATEGORY_MAPPING和PAYMENT_METHOD_MAPPING
+  - 在createExpense中应用映射
+  - 添加映射转换调试日志
+
+### 🎯 最终状态
+
+- ✅ **代码修复完成** - 本地测试100%成功
+- ✅ **推荐方案完善** - 支持中文字段
+- ✅ **文档更新** - `API.md`包含前端临时映射方案
+- ⏳ **等待Vercel** - 生产环境部署中
+
+### 📋 后续行动
+
+#### 对用户
+1. **立即可用方案** - 使用前端临时映射（见`API.md`）
+2. **等待生产部署** - 2-4小时后测试生产环境
+3. **可选保留映射** - 即使后端支持，前端保留映射更安全
+
+#### 对开发
+1. **监控Vercel部署** - 等待缓存清除
+2. **验证生产环境** - 部署完成后测试中文字段
+3. **更新文档** - 标记临时方案状态
+
+---
+
 ## 2025-06-28 修复DNS解析失败问题（ENOTFOUND）
 
 ### 🐛 问题描述

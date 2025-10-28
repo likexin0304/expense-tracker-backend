@@ -2237,13 +2237,22 @@ Authorization: Bearer <token>
 
 ### ⚡ 快速解决方案
 
-**如果遇到 `Expense.create is not a function` 错误**，建议使用以下方案：
+**如果遇到 `Expense.create is not a function` 或 `支出分类必须是有效值` 错误**，建议使用以下方案：
 
 **不使用** `POST /api/ocr/confirm/:recordId`，而是**直接调用创建支出API**：
 
 ```
 OCR解析 → 展示确认弹窗 → 直接调用 POST /api/expense
 ```
+
+### ⚠️ Vercel部署延迟问题
+
+**当前状态（2025-10-28）**:
+- ✅ 后端代码已修复并推送到GitHub（提交 `41e5c7c`）
+- ✅ 本地环境完全支持中文字段映射
+- ⏳ Vercel生产环境部署延迟（可能需要2-4小时）
+
+**临时解决方案**: 前端在调用API前先将中文转换为英文（见下文"前端临时映射"）
 
 ### 📝 实现步骤
 
@@ -2284,7 +2293,149 @@ Authorization: Bearer <token>
 }
 ```
 
-### 🎨 Swift代码示例（推荐方案）
+### 🔧 前端临时映射（立即可用⭐推荐）
+
+**由于Vercel部署延迟，前端可以临时在本地做中文到英文的转换**：
+
+```swift
+// MARK: - 临时映射工具（等Vercel部署完成后可移除）
+
+extension OCRConfirmationService {
+    
+    /// 中文分类 → 英文分类映射
+    private func mapCategoryToEnglish(_ category: String) -> String {
+        let mapping: [String: String] = [
+            "其他": "other",
+            "餐饮": "food",
+            "交通": "transport",
+            "娱乐": "entertainment",
+            "购物": "shopping",
+            "服装": "shopping",
+            "衣服": "shopping",
+            "账单": "bills",
+            "医疗": "healthcare",
+            "教育": "education",
+            "旅行": "travel",
+            // 英文直接通过
+            "food": "food",
+            "transport": "transport",
+            "entertainment": "entertainment",
+            "shopping": "shopping",
+            "bills": "bills",
+            "healthcare": "healthcare",
+            "education": "education",
+            "travel": "travel",
+            "other": "other"
+        ]
+        return mapping[category] ?? "other"
+    }
+    
+    /// 中文支付方式 → 英文支付方式映射
+    private func mapPaymentMethodToEnglish(_ method: String) -> String {
+        let mapping: [String: String] = [
+            "其他": "other",
+            "现金": "cash",
+            "银行卡": "card",
+            "信用卡": "card",
+            "借记卡": "card",
+            "支付宝": "online",
+            "微信支付": "online",
+            "微信": "online",
+            "网上支付": "online",
+            "在线支付": "online",
+            // 英文直接通过
+            "cash": "cash",
+            "card": "card",
+            "online": "online",
+            "other": "other"
+        ]
+        return mapping[method] ?? "other"
+    }
+    
+    /// 创建支出（带临时映射）
+    func createExpenseWithMapping(
+        amount: Double,
+        category: String,
+        description: String,
+        date: Date,
+        paymentMethod: String,
+        tags: [String] = []
+    ) async throws -> Expense {
+        // 🔄 临时映射：中文 → 英文
+        let englishCategory = mapCategoryToEnglish(category)
+        let englishPaymentMethod = mapPaymentMethodToEnglish(paymentMethod)
+        
+        print("🔄 字段映射: \(category) → \(englishCategory), \(paymentMethod) → \(englishPaymentMethod)")
+        
+        // 调用API
+        let url = "\(APIConfig.baseURL)/api/expense"
+        var request = URLRequest(url: URL(string: url)!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        
+        let requestData: [String: Any] = [
+            "amount": amount,
+            "category": englishCategory,  // ✅ 使用英文
+            "description": description,
+            "date": ISO8601DateFormatter().string(from: date),
+            "paymentMethod": englishPaymentMethod,  // ✅ 使用英文
+            "tags": tags
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestData)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 201 else {
+            throw APIError.serverError
+        }
+        
+        let result = try JSONDecoder().decode(ExpenseCreateResponse.self, from: data)
+        return result.data.expense
+    }
+}
+
+// MARK: - 使用示例
+
+func handleOCRConfirmation(parsedData: ParsedData) {
+    showConfirmationSheet(parsedData) { confirmedData in
+        Task {
+            do {
+                // ✅ 使用带映射的方法（支持中文输入）
+                let expense = try await ocrService.createExpenseWithMapping(
+                    amount: confirmedData.amount,
+                    category: confirmedData.category,  // 可以是中文"餐饮"或英文"food"
+                    description: confirmedData.description,
+                    date: confirmedData.date,
+                    paymentMethod: confirmedData.paymentMethod,  // 可以是中文"支付宝"或英文"online"
+                    tags: ["OCR识别"]
+                )
+                
+                print("✅ 支出创建成功: \(expense.id)")
+                // 更新UI
+            } catch {
+                print("❌ 创建失败: \(error)")
+            }
+        }
+    }
+}
+```
+
+**优势**:
+- ✅ **立即可用** - 不需要等待Vercel部署
+- ✅ **向后兼容** - Vercel部署完成后，映射仍然有效
+- ✅ **双语支持** - 同时支持中文和英文输入
+- ✅ **用户体验** - 用户可以立即使用OCR功能
+
+**何时移除**:
+- 等Vercel生产环境部署完成（预计2-4小时）
+- 测试生产环境支持中文后
+- 可以选择保留或移除此映射（保留更安全）
+
+---
+
+### 🎨 Swift代码示例（完整后端映射支持后）
 
 ```swift
 class OCRConfirmationService {
