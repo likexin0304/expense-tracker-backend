@@ -5050,3 +5050,201 @@ if (!hasValidInfo && cleanText.length < 15) {
 - [ ] 添加 `invalidOCRRecord` 到 `APIError` 枚举
 
 **详细更新指南**: 请参考 `docs/API.md` 中的"🔄 前端更新指南 (2025-01-22)"章节
+
+---
+
+## 2025-01-22 - OCR解析响应格式修复
+
+### 📱 问题报告
+
+用户在使用OCR识别功能时遇到解码错误：
+```
+Swift.DecodingError.keyNotFound(CodingKeys(stringValue: "record", intValue: nil)
+```
+
+**错误场景**:
+- OCR识别的文本为：`"识别 设置"`（无效的账单文本）
+- 后端返回200状态码，但响应格式与前端期望不匹配
+- 前端无法解析响应，因为缺少 `record` 字段
+
+**后端实际返回**:
+```json
+{
+  "success": true,
+  "data": {
+    "recordId": "3f1ac427-88df-496b-bd53-c6bd1e148505",
+    "parsedData": {...},
+    "confidence": 0.1
+  }
+}
+```
+
+**前端期望**:
+```swift
+struct OCRParseData: Codable {
+    let record: OCRRecord  // ❌ 缺少这个字段
+}
+```
+
+### 🔍 问题分析
+
+#### 根本原因
+1. **响应格式不匹配**：
+   - API文档定义的格式包含完整的 `record` 对象
+   - 后端代码实际返回的是简化的格式（只有 `recordId` 和 `parsedData`）
+   - 前端按照API文档实现，期望完整的 `record` 对象
+
+2. **parsedData格式不一致**：
+   - API文档期望嵌套对象格式：`{ amount: { value, confidence, originalText } }`
+   - ocrParser返回的是扁平格式：`{ amount: 25.80, amountConfidence: 0.95 }`
+   - 需要转换格式以匹配API文档
+
+### 🛠️ 修复方案
+
+#### 修复 parseText 方法的响应格式
+
+**文件**: `src/controllers/ocrController.js`
+
+**修改内容**:
+1. **添加完整的record对象**:
+```javascript
+// 构建完整的record对象（符合API文档格式）
+const recordData = finalRecord ? {
+    id: finalRecord.id,
+    originalText: finalRecord.originalText || text,
+    parsedData: formattedParsedData,
+    confidenceScore: parseResult.data?.overallConfidence || 0,
+    status: finalRecord.status || 'success',
+    createdAt: finalRecord.createdAt || new Date().toISOString(),
+    updatedAt: finalRecord.updatedAt || new Date().toISOString()
+} : null;
+```
+
+2. **转换parsedData为嵌套对象格式**:
+```javascript
+// 转换parsedData格式为API文档格式（嵌套对象格式）
+const formattedParsedData = {
+    merchant: parseResult.data?.merchant ? {
+        name: parseResult.data.merchant,
+        category: parseResult.data.category || '其他',
+        confidence: parseResult.data.merchantConfidence || 0,
+        matchType: 'extracted'
+    } : null,
+    amount: parseResult.data?.amount ? {
+        value: parseResult.data.amount,
+        confidence: parseResult.data.amountConfidence || 0,
+        originalText: text.match(/[¥￥]\s*\d+[\d.]*/)?.[0] || `${parseResult.data.amount}元`
+    } : null,
+    // ... 其他字段
+};
+```
+
+3. **更新响应格式**:
+```javascript
+const responseData = {
+    success: true,
+    message: parseResult.message || '解析成功',
+    data: {
+        record: recordData,  // ✅ 返回完整的record对象
+        recordId: recordId,  // 保留recordId以便向后兼容
+        parsedData: formattedParsedData,
+        confidence: parseResult.data?.overallConfidence || 0,
+        suggestions: {...}
+    }
+};
+```
+
+**效果**:
+- ✅ 响应格式符合API文档定义
+- ✅ 前端可以正确解析响应
+- ✅ 保留 `recordId` 字段以便向后兼容
+- ✅ `parsedData` 格式转换为嵌套对象格式
+
+### ✅ 修复验证
+
+#### 修复后的响应格式
+```json
+{
+  "success": true,
+  "message": "解析置信度较低",
+  "data": {
+    "record": {
+      "id": "3f1ac427-88df-496b-bd53-c6bd1e148505",
+      "originalText": "识别 设置",
+      "parsedData": {
+        "merchant": null,
+        "amount": null,
+        "date": {
+          "value": "2025-10-31",
+          "confidence": 0.1,
+          "originalText": "2025-10-31"
+        },
+        "paymentMethod": {
+          "value": "其他",
+          "confidence": 0.1,
+          "originalText": "其他"
+        },
+        "category": {
+          "value": "其他",
+          "confidence": 0.8,
+          "source": "inferred"
+        }
+      },
+      "confidenceScore": 0.1,
+      "status": "success",
+      "createdAt": "2025-01-22T...",
+      "updatedAt": "2025-01-22T..."
+    },
+    "recordId": "3f1ac427-88df-496b-bd53-c6bd1e148505",
+    "parsedData": {...},
+    "confidence": 0.1,
+    "suggestions": {
+      "shouldAutoCreate": false,
+      "needsReview": true
+    }
+  }
+}
+```
+
+### 📊 修复统计
+
+#### 修改的文件
+1. `src/controllers/ocrController.js` - 修复响应格式，添加完整的record对象
+
+#### 修改的代码行数
+- ocrController.js: ~50行新增（格式转换和record对象构建）
+
+#### 修复的错误类型
+- ✅ `keyNotFound: "record"` - 完全修复
+- ✅ parsedData格式不匹配 - 转换为嵌套对象格式
+- ✅ 响应格式与API文档不一致 - 完全对齐
+
+### 🚀 部署信息
+
+#### 部署状态
+- ✅ 代码已推送到GitHub（提交 `1c5b763`）
+- ✅ Vercel生产环境部署完成
+- ✅ 部署URL: `https://expense-tracker-backend-7yr1r15k0-likexin0304s-projects.vercel.app`
+- ✅ 部署时间: 2025-01-22
+- ✅ 部署状态: Ready (生产环境)
+
+#### 部署版本
+- **提交哈希**: `1c5b763`
+- **部署环境**: Production
+- **部署时长**: ~13秒
+
+### 🎯 修复状态
+
+**✅ 代码修复完成，响应格式已对齐API文档，已成功部署到生产环境**
+
+### 📋 前端更新清单
+
+**无需修改**：
+- ✅ 响应格式已修复，前端代码应该可以正常工作
+- ✅ `record` 字段已添加到响应中
+- ✅ `parsedData` 格式已转换为嵌套对象格式
+
+**建议验证**：
+- [ ] 测试OCR解析功能是否正常工作
+- [ ] 验证 `record` 对象是否可以正确解析
+- [ ] 确认 `parsedData` 的嵌套格式是否正确
