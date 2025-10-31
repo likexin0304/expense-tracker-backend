@@ -153,7 +153,8 @@ class OCRController {
                     updatedRecord = ocrRecord;
                 }
 
-                const recordId = updatedRecord?.id || ocrRecord?.id || null;
+                const finalRecord = updatedRecord || ocrRecord;
+                const recordId = finalRecord?.id || null;
                 console.log('✅ OCR解析成功:', {
                     recordId: recordId,
                     confidence: parseResult.data?.overallConfidence,
@@ -161,13 +162,55 @@ class OCRController {
                     amount: parseResult.data?.amount
                 });
 
-                // 确保响应格式一致
+                // 转换parsedData格式为API文档格式（嵌套对象格式）
+                const formattedParsedData = {
+                    merchant: parseResult.data?.merchant ? {
+                        name: parseResult.data.merchant,
+                        category: parseResult.data.category || '其他',
+                        confidence: parseResult.data.merchantConfidence || 0,
+                        matchType: 'extracted'  // 从文本中提取的
+                    } : null,
+                    amount: parseResult.data?.amount ? {
+                        value: parseResult.data.amount,
+                        confidence: parseResult.data.amountConfidence || 0,
+                        originalText: text.match(/[¥￥]\s*\d+[\d.]*/)?.[0] || `${parseResult.data.amount}元`
+                    } : null,
+                    date: parseResult.data?.date ? {
+                        value: parseResult.data.date,
+                        confidence: parseResult.data.dateConfidence || 0,
+                        originalText: parseResult.data.date
+                    } : null,
+                    paymentMethod: parseResult.data?.paymentMethod ? {
+                        value: parseResult.data.paymentMethod,
+                        confidence: parseResult.data.paymentMethodConfidence || 0,
+                        originalText: parseResult.data.paymentMethod
+                    } : null,
+                    category: parseResult.data?.category ? {
+                        value: parseResult.data.category,
+                        confidence: 0.8,  // 默认置信度
+                        source: 'inferred'  // 推断的
+                    } : null
+                };
+
+                // 构建完整的record对象（符合API文档格式）
+                const recordData = finalRecord ? {
+                    id: finalRecord.id,
+                    originalText: finalRecord.originalText || text,
+                    parsedData: formattedParsedData,  // 使用格式化后的parsedData
+                    confidenceScore: parseResult.data?.overallConfidence || 0,
+                    status: finalRecord.status || 'success',
+                    createdAt: finalRecord.createdAt || new Date().toISOString(),
+                    updatedAt: finalRecord.updatedAt || new Date().toISOString()
+                } : null;
+
+                // 确保响应格式一致（符合API文档和前端期望）
                 const responseData = {
                     success: true,
                     message: parseResult.message || '解析成功',
                     data: {
-                        recordId: recordId,
-                        parsedData: parseResult.data || {},
+                        record: recordData,  // ✅ 返回完整的record对象（符合API文档）
+                        recordId: recordId,  // 保留recordId以便向后兼容
+                        parsedData: formattedParsedData,  // 使用格式化后的parsedData
                         confidence: parseResult.data?.overallConfidence || 0,
                         suggestions: {
                             shouldAutoCreate: (parseResult.data?.overallConfidence || 0) > 0.8,
