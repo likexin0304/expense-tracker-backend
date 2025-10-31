@@ -16,8 +16,20 @@
 
 ## 基本信息
 
-**生产环境 URL:** `https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app`  
+**生产环境 URL（主域名，推荐）:** `https://expense-tracker-backend-likexin0304s-projects.vercel.app`  
+**最新部署 URL:** `https://expense-tracker-backend-71aevm14o-likexin0304s-projects.vercel.app`  
 **开发环境 URL:** `http://localhost:3000`
+
+### ⚠️ 重要：URL更新说明
+
+**请使用主域名或最新部署URL**，旧的特定部署URL可能不包含最新修复。
+
+**❌ 旧URL（请勿使用）:**
+- `https://expense-tracker-backend-1mnvyo1le-likexin0304s-projects.vercel.app` - 旧部署，缺少 `record` 字段
+
+**✅ 推荐URL:**
+- `https://expense-tracker-backend-likexin0304s-projects.vercel.app` - 主域名（自动指向最新部署）
+- `https://expense-tracker-backend-71aevm14o-likexin0304s-projects.vercel.app` - 最新部署（包含所有修复）
 
 ### ⚠️ 重要：前端URL配置更新
 
