@@ -427,27 +427,33 @@ class OCRController {
                             confidence: confidence
                         });
 
-                        // 转换为前端期望的格式
+                        // 转换为前端期望的格式（嵌套对象格式）
                         const formattedParsedData = {
                             amount: parseResult.data.amount ? {
                                 value: parseResult.data.amount,
-                                confidence: parseResult.data.amountConfidence || 0
+                                confidence: parseResult.data.amountConfidence || 0,
+                                originalText: parseResult.data.originalText?.match(/[¥￥]\s*\d+[\d.]*/)?.[0] || `${parseResult.data.amount}元`
                             } : null,
                             merchant: parseResult.data.merchant ? {
                                 name: parseResult.data.merchant,
-                                confidence: parseResult.data.merchantConfidence || 0
+                                category: parseResult.data.category || '其他',
+                                confidence: parseResult.data.merchantConfidence || 0,
+                                matchType: 'extracted'
                             } : null,
                             date: {
                                 value: parseResult.data.date,
-                                confidence: parseResult.data.dateConfidence || 0
+                                confidence: parseResult.data.dateConfidence || 0,
+                                originalText: parseResult.data.date
                             },
                             category: {
-                                name: parseResult.data.category,
-                                confidence: 0.8
+                                value: parseResult.data.category,
+                                confidence: 0.8,
+                                source: 'inferred'
                             },
                             paymentMethod: {
-                                type: parseResult.data.paymentMethod || '其他',
-                                confidence: parseResult.data.paymentMethodConfidence || 0
+                                value: parseResult.data.paymentMethod || '其他',
+                                confidence: parseResult.data.paymentMethodConfidence || 0,
+                                originalText: parseResult.data.paymentMethod || '其他'
                             },
                             originalText: parseResult.data.originalText
                         };
@@ -462,10 +468,12 @@ class OCRController {
                                 ocrRecord: {
                                     id: recordId,
                                     originalText: parseResult.data?.originalText,
-                                    parsedData: parseResult.data,
+                                    parsedData: formattedParsedData,  // ✅ 使用格式化后的嵌套对象格式
                                     confidenceScore: confidence,
                                     status: 'confirmed',
-                                    expenseId: expense.id
+                                    expenseId: expense.id,
+                                    createdAt: ocrRecord?.createdAt || new Date().toISOString(),
+                                    updatedAt: new Date().toISOString()
                                 },
                                 parsedData: formattedParsedData,
                                 confidence: confidence,
@@ -481,26 +489,33 @@ class OCRController {
                         console.error('❌ 自动创建支出记录失败:', expenseError.message);
                         
                         // 自动创建失败，返回解析结果让用户手动确认
+                        // 转换为前端期望的格式（嵌套对象格式）
                         const formattedParsedData = {
                             amount: parseResult.data.amount ? {
                                 value: parseResult.data.amount,
-                                confidence: parseResult.data.amountConfidence || 0
+                                confidence: parseResult.data.amountConfidence || 0,
+                                originalText: parseResult.data.originalText?.match(/[¥￥]\s*\d+[\d.]*/)?.[0] || `${parseResult.data.amount}元`
                             } : null,
                             merchant: parseResult.data.merchant ? {
                                 name: parseResult.data.merchant,
-                                confidence: parseResult.data.merchantConfidence || 0
+                                category: parseResult.data.category || '其他',
+                                confidence: parseResult.data.merchantConfidence || 0,
+                                matchType: 'extracted'
                             } : null,
                             date: {
                                 value: parseResult.data.date,
-                                confidence: parseResult.data.dateConfidence || 0
+                                confidence: parseResult.data.dateConfidence || 0,
+                                originalText: parseResult.data.date
                             },
                             category: {
-                                name: parseResult.data.category,
-                                confidence: 0.8
+                                value: parseResult.data.category,
+                                confidence: 0.8,
+                                source: 'inferred'
                             },
                             paymentMethod: {
-                                type: parseResult.data.paymentMethod || '其他',
-                                confidence: parseResult.data.paymentMethodConfidence || 0
+                                value: parseResult.data.paymentMethod || '其他',
+                                confidence: parseResult.data.paymentMethodConfidence || 0,
+                                originalText: parseResult.data.paymentMethod || '其他'
                             },
                             originalText: parseResult.data.originalText
                         };
@@ -515,9 +530,11 @@ class OCRController {
                                 ocrRecord: {
                                     id: recordId,
                                     originalText: parseResult.data?.originalText,
-                                    parsedData: parseResult.data,
+                                    parsedData: formattedParsedData,  // ✅ 使用格式化后的嵌套对象格式
                                     confidenceScore: confidence,
-                                    status: 'success'
+                                    status: 'success',
+                                    createdAt: ocrRecord?.createdAt || new Date().toISOString(),
+                                    updatedAt: new Date().toISOString()
                                 },
                                 parsedData: formattedParsedData,
                                 confidence: confidence,
@@ -532,27 +549,33 @@ class OCRController {
                     }
                 } else {
                     // 置信度不够，需要用户确认
-                    // 转换为前端期望的格式
+                    // 转换为前端期望的格式（嵌套对象格式）
                     const formattedParsedData = {
                         amount: parseResult.data.amount ? {
                             value: parseResult.data.amount,
-                            confidence: parseResult.data.amountConfidence || 0
+                            confidence: parseResult.data.amountConfidence || 0,
+                            originalText: parseResult.data.originalText?.match(/[¥￥]\s*\d+[\d.]*/)?.[0] || `${parseResult.data.amount}元`
                         } : null,
                         merchant: parseResult.data.merchant ? {
                             name: parseResult.data.merchant,
-                            confidence: parseResult.data.merchantConfidence || 0
+                            category: parseResult.data.category || '其他',
+                            confidence: parseResult.data.merchantConfidence || 0,
+                            matchType: 'extracted'
                         } : null,
                         date: {
                             value: parseResult.data.date,
-                            confidence: parseResult.data.dateConfidence || 0
+                            confidence: parseResult.data.dateConfidence || 0,
+                            originalText: parseResult.data.date
                         },
                         category: {
-                            name: parseResult.data.category,
-                            confidence: 0.8 // 基于推断的置信度
+                            value: parseResult.data.category,
+                            confidence: 0.8,
+                            source: 'inferred'
                         },
                         paymentMethod: {
-                            type: parseResult.data.paymentMethod || '其他',
-                            confidence: parseResult.data.paymentMethodConfidence || 0
+                            value: parseResult.data.paymentMethod || '其他',
+                            confidence: parseResult.data.paymentMethodConfidence || 0,
+                            originalText: parseResult.data.paymentMethod || '其他'
                         },
                         originalText: parseResult.data.originalText
                     };
@@ -567,9 +590,11 @@ class OCRController {
                             ocrRecord: {
                                 id: recordId,
                                 originalText: parseResult.data?.originalText,
-                                parsedData: parseResult.data,
+                                parsedData: formattedParsedData,  // ✅ 使用格式化后的嵌套对象格式
                                 confidenceScore: confidence,
-                                status: 'success'
+                                status: 'success',
+                                createdAt: ocrRecord?.createdAt || new Date().toISOString(),
+                                updatedAt: new Date().toISOString()
                             },
                             parsedData: formattedParsedData,
                             confidence: confidence,
