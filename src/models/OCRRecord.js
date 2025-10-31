@@ -5,9 +5,19 @@ const { supabaseAdmin } = require('../utils/supabase');
  */
 class OCRRecord {
     constructor(data) {
+        // 防御性检查：确保 data 存在
+        if (!data || typeof data !== 'object') {
+            throw new Error('OCRRecord构造函数：data参数无效或为空');
+        }
+
+        // 防御性检查：确保必需的 id 字段存在
+        if (!data.id) {
+            throw new Error('OCRRecord构造函数：缺少必需的id字段');
+        }
+
         this.id = data.id;
         this.userId = data.user_id;
-        this.originalText = data.original_text;
+        this.originalText = data.original_text || '';
         this.parsedData = data.parsed_data || {};
         this.confidenceScore = parseFloat(data.confidence_score || 0);
         this.status = data.status || 'processing';
@@ -45,6 +55,12 @@ class OCRRecord {
             if (error) {
                 console.error('❌ 创建OCR记录失败:', error);
                 throw new Error(`创建OCR记录失败: ${error.message}`);
+            }
+
+            // 防御性检查：确保 data 存在且有效
+            if (!data || !data.id) {
+                console.error('❌ 创建OCR记录失败: 数据库返回的数据无效', { data });
+                throw new Error('创建OCR记录失败: 数据库返回的数据无效');
             }
 
             console.log(`✅ OCR记录已创建: ${data.id}`);

@@ -38,6 +38,23 @@ class OCRParser {
             const cleanText = this.cleanText(text);
             console.log('🧹 清理后的文本:', { cleanTextLength: cleanText.length });
 
+            // 早期检查：验证文本是否包含账单相关关键词
+            const billKeywords = ['金额', '总计', '合计', '支付', '消费', '元', '¥', '￥', '$', '支付', '收款', '账单'];
+            const hasBillKeywords = billKeywords.some(keyword => cleanText.includes(keyword));
+            
+            // 检查是否包含数字（可能表示金额）
+            const hasNumbers = /\d/.test(cleanText);
+            
+            // 如果文本既没有账单关键词，也没有数字，且文本很短，可能不是有效的账单
+            if (!hasBillKeywords && !hasNumbers && cleanText.length < 10) {
+                console.warn('⚠️ 文本可能不是有效的账单信息:', { 
+                    text: cleanText.substring(0, 50), 
+                    hasBillKeywords, 
+                    hasNumbers 
+                });
+                // 不提前返回，继续尝试解析，但会降低置信度
+            }
+
             // 解析各个字段
             let amount = null;
             let date = null;
@@ -100,6 +117,31 @@ class OCRParser {
             } catch (error) {
                 console.error('❌ 计算置信度失败:', error);
                 confidence = 0.1;
+            }
+
+            // 验证解析结果：如果完全没有提取到有用信息，返回失败
+            const hasAmount = amount !== null;
+            const hasMerchant = bestMerchant !== null;
+            const hasValidInfo = hasAmount || hasMerchant || confidence > 0.3;
+            
+            if (!hasValidInfo && cleanText.length < 15) {
+                console.warn('⚠️ 无法从文本中提取有效信息:', {
+                    text: cleanText.substring(0, 50),
+                    hasAmount,
+                    hasMerchant,
+                    confidence
+                });
+                return {
+                    success: false,
+                    error: '无法从文本中提取有效的账单信息，请确保图片包含金额或商户名称',
+                    data: {
+                        originalText: text,
+                        overallConfidence: 0,
+                        amount: null,
+                        merchant: null
+                    },
+                    message: '无法提取有效信息'
+                };
             }
 
             // 确保所有字段都有默认值，避免null引用错误

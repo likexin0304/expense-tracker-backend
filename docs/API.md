@@ -1926,10 +1926,25 @@ class ReceiptScanViewController: UIViewController {
   "message": "文本解析失败",
   "error": "PARSE_FAILED",
   "data": {
-    "recordId": "ocr-uuid"
+    "recordId": "ocr-uuid"  // 或 null（如果OCR记录创建失败）
   }
 }
 ```
+
+#### 错误响应 - OCR记录创建失败 (500)
+```json
+{
+  "success": false,
+  "message": "OCR记录创建失败，无法继续处理",
+  "error": "INVALID_OCR_RECORD",
+  "data": null
+}
+```
+
+> **⚠️ 前端重要更新**:
+> - `error: "INVALID_OCR_RECORD"` 是新增的错误代码，表示OCR记录创建失败
+> - `data.recordId` 现在可能为 `null`（之前总是有值）
+> - 前端需要处理 `recordId` 为 `null` 的情况，将其设为可选类型
 
 ### 2. 确认并创建支出记录
 
@@ -3073,11 +3088,14 @@ struct OCRAutoData: Codable {
 struct OCRParseResponse: Codable {
     let success: Bool
     let message: String
-    let data: OCRParseData
+    let error: String?  // 新增：错误代码
+    let data: OCRParseData?
 }
 
 struct OCRParseData: Codable {
-    let record: OCRRecord
+    let recordId: String?  // ⚠️ 更新：改为可选类型，可能为 null
+    let parsedData: ParsedData?
+    let confidence: Double?
 }
 
 // OCR记录模型
@@ -3172,6 +3190,7 @@ enum APIError: Error {
     case serverError(Int)
     case decodingError
     case urlPathDuplicate(String)
+    case invalidOCRRecord  // ⚠️ 新增：OCR记录创建失败
     
     var description: String {
         switch self {
@@ -3187,6 +3206,8 @@ enum APIError: Error {
             return "数据解析失败"
         case .urlPathDuplicate(let path):
             return "URL路径重复: \(path)"
+        case .invalidOCRRecord:
+            return "OCR记录创建失败，请重试"
         }
     }
 }
@@ -4363,3 +4384,179 @@ enum APIConfig {
     }
 }
 ```
+
+---
+
+## 🔄 前端更新指南 (2025-01-22)
+
+### ⚠️ 重要：OCR错误处理更新
+
+由于后端修复了OCR解析中的undefined错误，前端需要进行以下更新：
+
+#### 1. 处理新的错误代码 `INVALID_OCR_RECORD`
+
+**新增错误场景**：OCR记录创建失败时（数据库问题或权限问题）
+
+**响应格式**：
+```json
+{
+  "success": false,
+  "message": "OCR记录创建失败，无法继续处理",
+  "error": "INVALID_OCR_RECORD",
+  "data": null
+}
+```
+
+**前端处理建议**：
+```swift
+// 在错误处理中添加新的错误代码
+switch errorCode {
+case "INVALID_OCR_RECORD":
+    // OCR记录创建失败
+    showError("系统错误：无法创建OCR记录，请重试")
+    // 可能需要重新开始OCR流程
+    
+case "PARSE_FAILED", "无法从文本中提取有效的账单信息":
+    // 解析失败或无效文本
+    if errorMessage.contains("无法从文本中提取有效") {
+        showAlert(
+            title: "识别失败",
+            message: "图片中未检测到有效的账单信息。\n\n请确保图片包含：\n• 金额（如：25.80元）\n• 商户名称\n\n建议重新拍摄清晰的账单照片。"
+        )
+    } else {
+        showError(errorMessage)
+    }
+    
+default:
+    showError(errorMessage)
+}
+```
+
+#### 2. 更新数据模型 - `recordId` 改为可选类型
+
+**变更说明**：错误响应中的 `data.recordId` 现在可能是 `null`（之前总是有值）
+
+**必须修改的数据模型**：
+```swift
+// 修改前
+struct OCRParseErrorData: Codable {
+    let recordId: String  // ❌ 不是可选的
+}
+
+// 修改后
+struct OCRParseErrorData: Codable {
+    let recordId: String?  // ✅ 改为可选类型
+}
+```
+
+**使用时的检查**：
+```swift
+// 确保 recordId 是可选类型
+if let recordId = errorData.recordId {
+    // 有 recordId，可以用于后续操作
+} else {
+    // 没有 recordId，这是新创建记录失败的情况
+    logError("OCR记录创建失败，recordId为null")
+}
+```
+
+#### 3. 完整的错误处理示例
+
+```swift
+func handleOCRParseError(_ error: APIError, response: OCRParseResponse?) {
+    guard let response = response else {
+        showError("网络错误，请检查网络连接")
+        return
+    }
+    
+    // 检查 success 字段（重要！）
+    guard !response.success else {
+        return
+    }
+    
+    let errorCode = response.error ?? "UNKNOWN_ERROR"
+    let errorMessage = response.message ?? "未知错误"
+    let recordId = response.data?.recordId  // ✅ 现在是可选类型
+    
+    switch errorCode {
+    case "INVALID_OCR_RECORD":
+        // OCR记录创建失败
+        showError("系统错误：无法创建OCR记录，请重试")
+        // 可能需要重新开始OCR流程
+        
+    case "PARSE_FAILED", "无法从文本中提取有效的账单信息":
+        // 解析失败或无效文本
+        if errorMessage.contains("无法从文本中提取有效") {
+            showAlert(
+                title: "识别失败",
+                message: "图片中未检测到有效的账单信息。\n\n请确保图片包含：\n• 金额（如：25.80元）\n• 商户名称\n\n建议重新拍摄清晰的账单照片。"
+            )
+        } else {
+            showError(errorMessage)
+        }
+        
+    case "INVALID_TEXT":
+        // 文本无效
+        showError("OCR文本无效，请重新识别")
+        
+    case "DATABASE_ERROR":
+        // 数据库错误
+        showError("服务器错误，请稍后重试")
+        
+    default:
+        // 其他错误
+        showError(errorMessage)
+    }
+    
+    // 如果有 recordId，可以用于错误报告或重试
+    if let recordId = recordId {
+        logError("OCR解析失败", recordId: recordId, error: errorCode)
+    } else {
+        logError("OCR解析失败（无recordId）", error: errorCode)
+    }
+}
+```
+
+#### 4. 更新APIError枚举
+
+```swift
+enum APIError: Error {
+    case invalidResponse
+    case badRequest
+    case unauthorized
+    case serverError(Int)
+    case decodingError
+    case urlPathDuplicate(String)
+    case invalidOCRRecord  // ✅ 新增
+    
+    var description: String {
+        switch self {
+        // ... 其他case
+        case .invalidOCRRecord:
+            return "OCR记录创建失败，请重试"
+        }
+    }
+}
+```
+
+### 📋 更新清单
+
+**必须修改**：
+- [ ] 处理 `INVALID_OCR_RECORD` 错误代码
+- [ ] 将 `recordId` 字段改为可选类型（`String?`）
+
+**建议修改**：
+- [ ] 根据错误消息类型显示不同的用户提示
+- [ ] 增强错误处理逻辑，检查 `success` 字段
+- [ ] 添加 `invalidOCRRecord` 到 `APIError` 枚举
+
+**不需要修改**：
+- ✅ 响应格式结构保持不变（`success`, `message`, `error`, `data`）
+- ✅ 正常成功的响应格式不变
+- ✅ API 端点路径不变
+
+### 🎯 向后兼容性
+
+- ✅ 完全向后兼容
+- ✅ 不影响现有正常功能
+- ✅ 只是增强了错误处理和防御性检查
