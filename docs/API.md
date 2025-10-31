@@ -3093,9 +3093,11 @@ struct OCRParseResponse: Codable {
 }
 
 struct OCRParseData: Codable {
-    let recordId: String?  // ⚠️ 更新：改为可选类型，可能为 null
-    let parsedData: ParsedData?
+    let record: OCRRecord?  // ✅ 完整的OCR记录对象（符合API文档）
+    let recordId: String?  // ⚠️ 可选：向后兼容字段，可能为 null
+    let parsedData: ParsedData?  // ✅ 嵌套对象格式的解析数据
     let confidence: Double?
+    let suggestions: Suggestions?
 }
 
 // OCR记录模型
